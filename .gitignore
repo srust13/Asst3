@@ -3,6 +3,7 @@ bin/
 build/
 .gdb_history
 peda-session-*
+notes.txt
 
 # Prerequisites
 *.d
