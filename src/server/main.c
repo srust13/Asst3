@@ -103,7 +103,8 @@ void init(){
 
     // add all indexes to free threads buffer
     pthread_mutex_lock(&free_threads_lock);
-    for (size_t i = 0; i < MAX_CONNS; i++){
+    int i;
+    for (i = 0; i < MAX_CONNS; i++){
         free_threads[i] = i;
     }
     num_free_threads = MAX_CONNS;

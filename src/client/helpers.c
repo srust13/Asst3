@@ -18,7 +18,8 @@ void assert_malloc_success(void *buf, int count, ...) {
         // free all buffers passed into function
         va_list ap;
         va_start(ap, count);
-        for (int i = 0; i < count; i++){
+        int i;
+        for (i = 0; i < count; i++){
             free(va_arg(ap, void *));
         }
         va_end(ap);
@@ -88,7 +89,8 @@ void read_and_test_config(int *sock){
     while (!eof) {
         int bytes_read = 0;
         char *temp = read_chunk(fd, &bytes_read, &eof);
-        for (int i = 0; i < bytes_read; i++){
+        int i;
+        for (i = 0; i < bytes_read; i++){
             // double buffer size if full
             if (buf_idx == buf_len){
                 buf_len *= 2;
