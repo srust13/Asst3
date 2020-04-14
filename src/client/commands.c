@@ -103,6 +103,7 @@ void create(char *project){
     free(manifest_data);
     close(manifest_fd);
     close(sock);
+    puts("Server disconnected");
 }
 
 void destroy(char *project){

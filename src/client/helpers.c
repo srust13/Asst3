@@ -153,7 +153,7 @@ void set_socket(int *sock){
         sleep(3);
     }
 
-    puts("Successfully connected to server");
+    puts("Server connected");
 }
 
 /**

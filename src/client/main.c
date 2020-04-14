@@ -67,5 +67,6 @@ int main(int argc, char *argv[]){
     } else {
         usage("Invalid command");
     }
+    puts("Command completed successfully");
     return 0;
 }

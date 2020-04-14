@@ -41,7 +41,7 @@ all: bin/WTFserver bin/WTF
 
 create: MANIFEST=test_out/client/huffman_dir/.Manifest
 create: all
-	@./tests/scripts/create.sh
+	@./tests/scripts/create.sh 1>/dev/null
 	@echo "4a9557b5bbe09ae19ffed20aa64d2c78 ${MANIFEST}" | md5sum -c --quiet - && \
 	 ( diff -qr test_out/client/huffman_dir test_out/server/huffman_dir && \
 	 echo ${GREEN}PASS${NC} ) || echo ${RED}FAIL${NC}
