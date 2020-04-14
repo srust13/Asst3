@@ -10,8 +10,6 @@
 
 #include "helpers.h"
 
-#define CHUNK_SIZE 1024
-
 void assert_malloc_success(void *buf, int count, ...) {
     if (buf == NULL){
 
@@ -62,7 +60,12 @@ char *read_chunk(int fd, int *bytes_read, int *eof){
     return buf;
 }
 
-void read_and_test_config(int *sock){
+/**
+ * Before any command besides "configure" is run, we first
+ * check to see if a .configure file exists. If so, read it
+ * and attempt to connect to the server.
+ */
+void set_socket(int *sock){
 
     // check if file exists
     if(access(".configure", F_OK) == -1){
@@ -151,4 +154,12 @@ void read_and_test_config(int *sock){
     }
 
     puts("Successfully connected to server");
+}
+
+/**
+ * Send newline-delimited message to server.
+ */
+void send_msg(int sock, char *msg){
+    write(sock, msg, strlen(msg));
+    write(sock, "\n", 1);
 }

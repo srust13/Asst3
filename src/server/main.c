@@ -7,15 +7,12 @@
 #include <pthread.h>
 #include <signal.h>
 
+#include "commands.h"
+
 #define MAX_CONNS 10
 
-typedef struct connection_info {
-    pthread_t thread_id;
-    int client_fd;
-} connection_info;
-
 int server_fd;
-connection_info conn_infos[MAX_CONNS];
+buf_socket_t conn_infos[MAX_CONNS];
 size_t free_threads[MAX_CONNS];
 size_t free_threads_idx;
 size_t num_free_threads;
@@ -48,44 +45,67 @@ void sigint_handler(int s){
     exit(EXIT_SUCCESS);
 }
 
-void *client_handler(void *conninfo_idx){
+void perform_cmd(buf_socket_t *conn){
 
-    int conn_idx = *((size_t *)conninfo_idx);
-    connection_info conn = conn_infos[conn_idx];
+    // read command
+    read_chunks(conn, '\n', 0);
 
-    //Get the socket descriptor
-    int sock = conn.client_fd;
-    int read_size;
-    char client_message[2000];
-
-    //Send some messages to the client
-    char *message = "Greetings! I am your connection handler\n";
-    write(sock, message, strlen(message));
-
-    message = "Now type something and i shall repeat what you type \n";
-    write(sock, message, strlen(message));
-
-    //Receive a message from client
-    while( (read_size = recv(sock, client_message, 2000, 0)) > 0 ){
-        //end of string marker
-		client_message[read_size] = '\0';
-
-		//Send the message back to client
-        write(sock, client_message, strlen(client_message));
-
-		//clear the message buffer
-		memset(client_message, 0, 2000);
+    // perform command
+    if (!strcmp(conn->data, "checkout")){
+        checkout(conn);
+    } else if (!strcmp(conn->data, "update")){
+        update(conn);
+    } else if (!strcmp(conn->data, "upgrade")){
+        upgrade(conn);
+    } else if (!strcmp(conn->data, "commit")){
+        commit(conn);
+    } else if (!strcmp(conn->data, "push")){
+        push(conn);
+    } else if (!strcmp(conn->data, "create")){
+        create(conn);
+    } else if (!strcmp(conn->data, "destroy")){
+        destroy(conn);
+    } else if (!strcmp(conn->data, "add")){
+        add(conn);
+    } else if (!strcmp(conn->data, "remove")){
+        remove_cmd(conn);
+    } else if (!strcmp(conn->data, "currentversion")){
+        currentversion(conn);
+    } else if (!strcmp(conn->data, "history")){
+        history(conn);
+    } else if (!strcmp(conn->data, "rollback")){
+        rollback(conn);
+    } else {
+        printf("Invalid command: %s\n", conn->data);
+        close(conn->sock);
+        free(conn->data);
+        free(conn->remaining);
+        exit(EXIT_FAILURE);
     }
+}
 
-    if(read_size == 0){
-        puts("Client disconnected");
-        fflush(stdout);
-    } else if(read_size == -1){
-        puts("recv failed");
-    }
+void *handle_connection(void *conninfo_idx){
+
+    // get socket fd
+    int conn_idx = *((int *) conninfo_idx);
+    buf_socket_t *conn = &(conn_infos[conn_idx]);
+
+    // initialize conn
+    conn->data = malloc(CHUNK_SIZE);
+    conn->data_buf_size = CHUNK_SIZE;
+
+    conn->remaining = malloc(CHUNK_SIZE);
+    conn->remaining_size = 0;
+
+    // handle request
+    perform_cmd(conn);
 
     // cleanup
-    close(sock);
+    free(conn->data);
+    free(conn->remaining);
+    close(conn->sock);
+
+    puts("Client disconnected");
 
     pthread_mutex_lock(&free_threads_lock);
     size_t insert_idx = (conn_idx + num_free_threads++) % MAX_CONNS;
@@ -177,9 +197,16 @@ int main(int argc, char *argv[]){
         pthread_mutex_unlock(&free_threads_lock);
 
         // kick off pthread to handle client
-        conn_infos[conninfo_idx].client_fd = client_fd;
+        conn_infos[conninfo_idx].sock = client_fd;
+
+        // if you want to debug a single threaded app,
+        // just un-comment the below line
+        // and comment out the if-statement and its contents entirely
+
+        // handle_connection((void *) &conninfo_idx);
+
         if(pthread_create(&(conn_infos[conninfo_idx].thread_id), NULL,
-                          client_handler, (void *) &conninfo_idx) < 0){
+                          handle_connection, (void *) &conninfo_idx) < 0){
             puts("Couldn't create thread");
             exit(EXIT_FAILURE);
         }
