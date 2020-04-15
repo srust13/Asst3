@@ -48,7 +48,7 @@ void sigint_handler(int s){
 void perform_cmd(buf_socket_t *conn){
 
     // read command
-    read_chunks(conn, '\n', 0);
+    read_app_data_from_socket(conn, '\n', 0);
 
     // perform command
     if (!strcmp(conn->data, "checkout")){
@@ -203,13 +203,13 @@ int main(int argc, char *argv[]){
         // just un-comment the below line
         // and comment out the if-statement and its contents entirely
 
-        // handle_connection((void *) &conninfo_idx);
+        handle_connection((void *) &conninfo_idx);
 
-        if(pthread_create(&(conn_infos[conninfo_idx].thread_id), NULL,
-                          handle_connection, (void *) &conninfo_idx) < 0){
-            puts("Couldn't create thread");
-            exit(EXIT_FAILURE);
-        }
+        // if(pthread_create(&(conn_infos[conninfo_idx].thread_id), NULL,
+        //                   handle_connection, (void *) &conninfo_idx) < 0){
+        //     puts("Couldn't create thread");
+        //     exit(EXIT_FAILURE);
+        // }
     }
     return 0;
 }

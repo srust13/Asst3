@@ -3,12 +3,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <netdb.h>
-#include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
+#include <sys/types.h>
 
-#include "helpers.h"
+#include "../common/helpers.h"
 
 void checkout(buf_socket_t *conn){
     puts("Checkout");
@@ -33,19 +31,9 @@ void push(buf_socket_t *conn){
 void create(buf_socket_t *conn){
 
     // read project
-    read_chunks(conn, '\n', 0);
-    char *project = conn->data;
-
-    // check if project exists
-    int success = 0;
-    struct stat st = {0};
-    if (stat(project, &st) != -1){
-        write(conn->sock, &success, sizeof(success));
+    if (recv_and_verify_project(conn))
         return;
-    } else {
-        success = 1;
-        write(conn->sock, &success, sizeof(success));
-    }
+    char *project = conn->data;
 
     // create local project folder
     mkdir(project, 0755);
@@ -53,22 +41,19 @@ void create(buf_socket_t *conn){
     // open local .Manifest file
     char *fname = malloc(strlen(project) + strlen(".Manifest") + 2);
     sprintf(fname, "%s/.Manifest", project);
-
     int manifest_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    free(fname);
 
-    // generate .Manifest file and send data to client
+    // write local .Manifest file
     char manifest_data[] = "version: 0\n";
     int manifest_size = strlen(manifest_data);
     write(manifest_fd, manifest_data, manifest_size);
+    close(manifest_fd);
 
-    // send size of file and file contents over socket
-    int manifest_size_network = htonl(manifest_size);
-    write(conn->sock, &manifest_size_network, sizeof(manifest_size_network));
-    write(conn->sock, manifest_data, manifest_size);
+    // send .Manifest file to client
+    send_file(fname, conn->sock);
 
     // cleanup
-    close(manifest_fd);
+    free(fname);
 }
 
 void destroy(buf_socket_t *conn){

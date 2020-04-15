@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../common/helpers.h"
+
 void configure(char *hostname, char *port);
 void checkout(char *project);
 void update(char *project);

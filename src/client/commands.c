@@ -8,17 +8,17 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
-#include "helpers.h"
+#include "commands.h"
 
 int sock;
 
 void configure(char *hostname, char *port){
-    // create buffer
+    // create data
     int buf_len = strlen(hostname) + strlen(port) + 2;
     char *buf = malloc(buf_len + 1); // sprintf adds null terminator
     sprintf(buf, "%s\n%s\n", hostname, port);
 
-    // write to file
+    // write data to file
     int fd = open(".configure", O_WRONLY | O_CREAT | O_TRUNC, 0666);
     write(fd, buf, buf_len);
     close(fd);
@@ -67,14 +67,13 @@ void push(char *project){
 
 void create(char *project){
     set_socket(&sock);
-    send_msg(sock, "create");
-    send_msg(sock, project);
+    sendline_ack(sock, "create");
 
     // make sure project doesn't exist on server
-    int success = 0;
-    recv(sock, &success, sizeof(success), MSG_WAITALL);
-    if (!success){
-        puts("Project already exists on server");
+    int proj_exists = server_project_exists(sock, project);
+    if (proj_exists){
+        puts("Project already exists on server!");
+        puts("Client disconnecting.");
         close(sock);
         exit(EXIT_FAILURE);
     }
@@ -82,28 +81,15 @@ void create(char *project){
     // create local project folder
     mkdir(project, 0755);
 
-    // open local .Manifest file
+    // receive remote .Manifest file
     char *fname = malloc(strlen(project) + strlen(".Manifest") + 2);
     sprintf(fname, "%s/.Manifest", project);
-    int manifest_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-    free(fname);
-
-    // receive bytes to write to .Manifest file
-    int file_size = 0;
-    recv(sock, &file_size, sizeof(file_size), MSG_WAITALL);
-    file_size = ntohl(file_size);
-    char *manifest_data = malloc(CHUNK_SIZE);
-    while (file_size > 0){
-        int bytes_read = recv(sock, manifest_data, CHUNK_SIZE, 0);
-        file_size -= bytes_read;
-        write(manifest_fd, manifest_data, bytes_read);
-    }
+    recv_file(sock, fname);
 
     // cleanup
-    free(manifest_data);
-    close(manifest_fd);
+    free(fname);
     close(sock);
-    puts("Server disconnected");
+    puts("Client gracefully disconnected from server");
 }
 
 void destroy(char *project){
@@ -115,9 +101,17 @@ void destroy(char *project){
 }
 
 void add(char *project, char *filename){
-    puts("Add");
-    printf("Project: %s\n", project);
-    printf("Filename: %s\n", filename);
+
+    // check if project exists
+    int success = 0;
+    struct stat st = {0};
+    if (stat(project, &st) == -1){
+        puts("Local project does not exist");
+        exit(EXIT_FAILURE);
+    }
+
+    // open file
+
 }
 
 void remove_cmd(char *project, char *filename){
