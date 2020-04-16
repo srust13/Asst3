@@ -44,7 +44,7 @@ void create(buf_socket_t *conn){
     int manifest_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // write local .Manifest file
-    char manifest_data[] = "version: 0\n";
+    char manifest_data[] = "0\n";
     int manifest_size = strlen(manifest_data);
     write(manifest_fd, manifest_data, manifest_size);
     close(manifest_fd);

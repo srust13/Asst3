@@ -8,6 +8,7 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <sys/stat.h>
+#include <openssl/md5.h>
 
 #include "helpers.h"
 
@@ -151,6 +152,33 @@ void recv_file(int sock, char *fname){
     // cleanup
     free(data);
     close(manifest_fd);
+}
+
+/**
+ * Computes the md5sum of the given file.
+ */
+void md5sum(char *filename, char *hexstring){
+    int n;
+    MD5_CTX c;
+    char buf[512];
+    ssize_t bytes;
+    unsigned char out[MD5_DIGEST_LENGTH];
+
+    int fd = open(filename, O_RDONLY);
+
+    MD5_Init(&c);
+    bytes=read(fd, buf, 512);
+    while (bytes > 0){
+        MD5_Update(&c, buf, bytes);
+        bytes = read(fd, buf, 512);
+    }
+
+    MD5_Final(out, &c);
+    close(fd);
+
+    // convert bytes to hexstring
+    int i;
+    for (i = 0; i < 16; i++) sprintf(hexstring+2*i, "%02X", out[i]);
 }
 
 

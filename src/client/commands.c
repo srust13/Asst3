@@ -102,7 +102,7 @@ void destroy(char *project){
 
 void add(char *project, char *filename){
 
-    // check if project exists
+    // check if project exists locally
     int success = 0;
     struct stat st = {0};
     if (stat(project, &st) == -1){
@@ -110,14 +110,47 @@ void add(char *project, char *filename){
         exit(EXIT_FAILURE);
     }
 
-    // open file
+    // create manifest path
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 2);
+    sprintf(manifest, "%s/.Manifest", project);
 
+    // hash file
+    char hexstring[33];
+    md5sum(filename, hexstring);
+
+    // create buf
+    int buf_size = strlen(filename) + strlen(hexstring) + strlen("+++0  \n ");
+    char *data = malloc(buf_size);
+    sprintf(data, "+++0 %s %s\n", filename, hexstring);
+
+    // write "new file" indicator
+    int fd = open(manifest, O_RDWR | O_APPEND);
+    write(fd, data, buf_size-1); // no null byte
+
+    // cleanup
+    close(fd);
+    free(data);
+    free(manifest);
 }
 
 void remove_cmd(char *project, char *filename){
-    puts("Remove");
-    printf("Project: %s\n", project);
-    printf("Filename: %s\n", filename);
+    // check if project exists locally
+    int success = 0;
+    struct stat st = {0};
+    if (stat(project, &st) == -1){
+        puts("Local project does not exist");
+        exit(EXIT_FAILURE);
+    }
+
+    // create manifest path
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 2);
+    sprintf(manifest, "%s/.Manifest", project);
+
+    // todo: edit in middle of file by removing line that has filename in it
+    // read_chunks()
+
+    // cleanup
+    free(manifest);
 }
 
 void currentversion(char *project){

@@ -24,3 +24,4 @@ int recv_and_verify_project(buf_socket_t *conn);
 
 void set_socket(int *sock);
 void read_app_data_from_socket(buf_socket_t *conn, char delim, int num_bytes);
+void md5sum(char *filename, char *hexstring);
