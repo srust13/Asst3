@@ -24,4 +24,7 @@ int recv_and_verify_project(buf_socket_t *conn);
 
 void set_socket(int *sock);
 void read_app_data_from_socket(buf_socket_t *conn, char delim, int num_bytes);
-void md5sum(char *filename, char *hexstring);
+
+void assert_project_exists_local(char *project);
+void add_files_to_manifest(char *project, char **filenames, int num_files);
+void remove_files_from_manifest(char *project, char **filenames, int num_files);

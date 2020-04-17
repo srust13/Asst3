@@ -155,6 +155,18 @@ void recv_file(int sock, char *fname){
 }
 
 /**
+ * Checks if project exists locally.
+ */
+void assert_project_exists_local(char *project){
+    int success = 0;
+    struct stat st = {0};
+    if (stat(project, &st) == -1){
+        puts("Local project does not exist");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/**
  * Computes the md5sum of the given file.
  */
 void md5sum(char *filename, char *hexstring){
@@ -181,6 +193,114 @@ void md5sum(char *filename, char *hexstring){
     for (i = 0; i < 16; i++) sprintf(hexstring+2*i, "%02X", out[i]);
 }
 
+void add_files_to_manifest(char *project, char **filenames, int num_files){
+    // create manifest path
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 2);
+    sprintf(manifest, "%s/.Manifest", project);
+    int fd = open(manifest, O_RDWR | O_APPEND);
+
+    int i;
+    for (i = 0; i < num_files; i++){
+        char *filename = filenames[i];
+
+        // hash file
+        char hexstring[33];
+        md5sum(filename, hexstring);
+
+        // create buf
+        int buf_size = strlen(hexstring) + strlen(filename) + strlen("0  \n ");
+        char *data = malloc(buf_size);
+        sprintf(data, "0 %s %s\n", hexstring, filename);
+
+        // write "new file" indicator
+        write(fd, data, buf_size-1); // no null byte
+        free(data);
+    }
+
+    // cleanup
+    close(fd);
+    free(manifest);
+}
+
+void remove_files_from_manifest(char *project, char **filenames, int num_files){
+    // seed random with time
+    srand(time(0));
+
+    // create manifest path
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 2);
+    sprintf(manifest, "%s/.Manifest", project);
+
+    // create random temp filename - strlen("/tmp/1234567890") = 15
+    char tempfile[15+1];
+    sprintf(tempfile, "/tmp/");
+    int i;
+    for(i = 5; i < 15; i++) {
+        sprintf(tempfile + i, "%x", rand() % 16);
+    }
+
+    int fin = open(manifest, O_RDONLY);
+    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    char *line = malloc(CHUNK_SIZE);
+    int line_len = CHUNK_SIZE;
+    int line_idx = 0;
+    int eof = 0;
+    while (!eof) {
+        int bytes_read = 0;
+        char *temp = read_file_chunk(fin, &bytes_read, &eof);
+        int i;
+        for (i = 0; i < bytes_read; i++){
+            // double buffer size if full
+            if (line_idx == line_len - 1){
+                line_len *= 2;
+                char *new_buf = realloc(line, line_len);
+                if (new_buf == NULL) {
+                    puts("Memory allocation failed");
+                    free(line);
+                    free(temp);
+                    exit(EXIT_FAILURE);
+                }
+                line = new_buf;
+            }
+
+            // copy one byte from temp to buf
+            line[line_idx++] = temp[i];
+
+            // check if reached newline
+            if (line[line_idx-1] == '\n'){
+                // check if any of filenames are on this line
+                line[line_idx-1] = '\0';
+                int j;
+                int found = 0;
+                for (j = 0; j < num_files; j++){
+                    if (strstr(line, filenames[j]) != NULL){
+                        found = 1;
+                        j = num_files;
+                    }
+                }
+
+                // write line to new file if not found
+                if (!found){
+                    write(fout, line, strlen(line));
+                    write(fout, "\n", 1);
+                }
+
+                // reset line buffer
+                line_idx = 0;
+            }
+        }
+        free(temp);
+    }
+    free(line);
+
+    // rename file
+    close(fin);
+    close(fout);
+    rename(tempfile, manifest);
+
+    // cleanup
+    free(manifest);
+}
 
 /**********************************************************************************
                                   CLIENT HELPERS

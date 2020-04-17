@@ -4,7 +4,7 @@ build/
 .gdb_history
 peda-session-*
 notes.txt
-test_out/
+tests_out/
 
 # Prerequisites
 *.d

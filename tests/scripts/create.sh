@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # start server
-cd test_out/server
+cd tests_out/server
 ../../bin/WTFserver 5000 &
 pid=$!
 

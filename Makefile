@@ -36,14 +36,20 @@ all: bin/WTFserver bin/WTF
 
 # runners
 
-create: MANIFEST=test_out/client/huffman_dir/.Manifest
+create: MANIFEST=tests_out/client/huffman_dir/.Manifest
 create: all
 	@./tests/scripts/create.sh 1>/dev/null
 	@echo "897316929176464ebc9ad085f31e7284 ${MANIFEST}" | md5sum -c --quiet - && \
-	 ( diff -qr test_out/client/huffman_dir test_out/server/huffman_dir && \
+	 ( diff -qr tests_out/client/huffman_dir tests_out/server/huffman_dir && \
 	 echo ${GREEN}PASS${NC} ) || echo ${RED}FAIL${NC}
 
-run: create
+add_remove: MANIFEST=tests_out/client/huffman_dir/.Manifest
+add_remove: create
+	@./tests/scripts/add_remove.sh 1>/dev/null
+	@(echo "e7fb17bdeb0e8a3fc018f11f17ad2a2c ${MANIFEST}" | md5sum -c --quiet -  && \
+	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+
+run: create add_remove
 
 clean:
-	$(RM) -r build/* bin/* .configure test_out/server/* test_out/client/* test_out/client/.configure
+	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure
