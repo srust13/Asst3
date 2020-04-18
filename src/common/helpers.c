@@ -295,6 +295,8 @@ void recv_file(int sock, char *dest){
     close(local_fd);
 }
 
+void sendDirectory() {}
+
 /**
  * Computes the md5sum of the given file.
  */
