@@ -35,6 +35,7 @@ void create(int sock){
 
     // send requested .Manifest to client
     send_file(".Manifest", sock);
+    chdir("..");
 }
 
 void destroy(int sock){
@@ -49,6 +50,7 @@ void currentversion(int sock){
 
     // send requested .Manifest to client
     send_file(".Manifest", sock);
+    chdir("..");
 }
 
 void history(int sock){

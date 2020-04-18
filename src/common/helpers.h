@@ -19,7 +19,7 @@ typedef struct file_buf_t {
 
 void sendline(int sock, char *msg);
 char *recvline(int sock);
-void read_line(file_buf_t *info);
+void read_file_until(file_buf_t *info, char delim);
 void send_file(char *filename, int sock);
 void recv_file(int sock, char *dest);
 void add_files_to_manifest(char **filenames, int num_files);

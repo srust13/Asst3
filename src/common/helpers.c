@@ -478,14 +478,20 @@ void assert_project_exists_local(char *project){
  */
 void init_socket_server(int *sock, char *command){
 
+    // check if inside a project
+    const char *config_file = ".configure";
+    if(access(".Manifest", F_OK) != -1){
+        config_file = "../.configure";
+    }
+
     // check if file exists
-    if(access(".configure", F_OK) == -1){
+    if(access(config_file, F_OK) == -1){
         puts("Missing .configure file! Did you run configure?");
         exit(EXIT_FAILURE);
     }
 
     // read data from file
-    int fd = open(".configure", O_RDONLY);
+    int fd = open(config_file, O_RDONLY);
     if (fd == -1){
         puts("Can't open .configure file!");
         exit(EXIT_FAILURE);
@@ -571,7 +577,7 @@ void init_socket_server(int *sock, char *command){
 
     // send command
     puts("Server connected");
-    sendline(*sock, "create");
+    sendline(*sock, command);
 }
 
 /**

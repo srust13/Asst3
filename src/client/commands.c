@@ -112,7 +112,7 @@ void currentversion(char *project){
 
     // make sure project exists on server
     int proj_exists = server_project_exists(sock, project);
-    if (proj_exists){
+    if (!proj_exists){
         puts("Project doesn't exist on server!");
         puts("Client disconnecting.");
         close(sock);
@@ -130,10 +130,21 @@ void currentversion(char *project){
     info->remaining = malloc(CHUNK_SIZE);
     info->data_buf_size = CHUNK_SIZE;
 
-    // todo: print out stuff from tempfile before deleting
-    while (!info->file_eof){
-
+    // skip first line that just has the name of the project
+    puts("\n----------------------------------------------");
+    puts("Version | Filename");
+    puts("----------------------------------------------");
+    read_file_until(info, '\n');
+    while (1){
+        read_file_until(info, ' ');
+        if (info->file_eof)
+            break;
+        printf("%s ", info->data);
+        read_file_until(info, ' ');
+        read_file_until(info, '\n');
+        printf("%s\n", info->data);
     }
+    puts("");
 
     // cleanup
     free(info->remaining);
@@ -141,6 +152,7 @@ void currentversion(char *project){
     if (info->fd) close(info->fd);
     if (info->sock) close(info->sock);
     free(info);
+    remove(tempfile);
     puts("Client gracefully disconnected from server");
 }
 
