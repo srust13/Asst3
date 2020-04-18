@@ -30,7 +30,7 @@ void usage(char *msg){
 }
 
 int main(int argc, char *argv[]){
-
+    seed_rand();
     if (argc < 3) usage("Unreconized command or missing argument");
     char *cmd = argv[1];
 

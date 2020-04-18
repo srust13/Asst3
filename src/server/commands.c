@@ -37,12 +37,17 @@ void push(int sock){
 
 void create(int sock){
     // if project doesn't exist, create it
-    if (set_create_project(sock, 1))
+    // if project does exist, return because client made bad request
+    char *project = set_create_project(sock, 1);
+    if (!project)
         return;
 
     // send requested .Manifest to client
-    send_file(".Manifest", sock);
-    chdir("..");
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+    sprintf(manifest, "%s/.Manifest", project);
+    send_file(manifest, sock, 1);
+    free(manifest);
+    free(project);
 }
 
 void destroy(int sock){
@@ -50,14 +55,17 @@ void destroy(int sock){
 }
 
 void currentversion(int sock){
-    if (!set_create_project(sock, 0)){
-        puts("Project does not exist on server.");
+    // if project doesn't exist, client made bad request
+    char *project = set_create_project(sock, 0);
+    if (!project)
         return;
-    }
 
     // send requested .Manifest to client
-    send_file(".Manifest", sock);
-    chdir("..");
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+    sprintf(manifest, "%s/.Manifest", project);
+    send_file(manifest, sock, 0);
+    free(manifest);
+    free(project);
 }
 
 void history(int sock){

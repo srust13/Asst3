@@ -67,7 +67,7 @@ void send_ack(int sock, void *msg, int msg_len){
  * Send newline-delimited message to server.
  * Wait for an ACK after sending a message.
  */
-void sendline(int sock, char *msg){
+void send_line(int sock, char *msg){
     write(sock, msg, strlen(msg));
     write(sock, "\n", 1);
     wait_for_ack(sock);
@@ -79,7 +79,7 @@ void sendline(int sock, char *msg){
  *
  * The returned pointer must be freed.
  */
-char *recvline(int sock){
+char *recv_line(int sock){
     // read chunks from fd until exit condition is reached
     char *line = malloc(CHUNK_SIZE);
     char *temp = malloc(CHUNK_SIZE);
@@ -138,6 +138,20 @@ void send_int(int sock, int num){
 // ------------------------------------
 //               FILES
 // ------------------------------------
+
+void init_file_buf(file_buf_t *info, char *filename) {
+    info->fd = open(filename, O_RDONLY);
+    info->data = malloc(CHUNK_SIZE);
+    info->remaining = malloc(CHUNK_SIZE);
+    info->data_buf_size = CHUNK_SIZE;
+}
+
+void clean_file_buf(file_buf_t *info){
+    free(info->remaining);
+    free(info->data);
+    close(info->fd);
+    free(info);
+}
 
 /**
  * Reads a chunk of data from a file.
@@ -249,7 +263,14 @@ void read_file_until(file_buf_t *info, char delim){
 /**
  * Send file over socket and wait for ACK.
  */
-void send_file(char *filename, int sock){
+void send_file(char *filename, int sock, int send_filename){
+
+    // send filename if we should
+    send_int(sock, send_filename);
+    if (send_filename){
+        write(sock, filename, strlen(filename));
+        write(sock, "\n", 1);
+    }
 
     // send file size
     struct stat st = {0};
@@ -272,13 +293,36 @@ void send_file(char *filename, int sock){
 }
 
 /**
- * Receives a file from remote and write it
- * locally to the given filename.
+ * Receives a file from remote and write it locally.
+ * If the receiver indicated a destination filename,
+ * that filename is used. Otherwise, the server must
+ * provide a location to write it to.
  */
 void recv_file(int sock, char *dest){
 
-    // open local file
-    int local_fd = open(dest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int local_fd;
+    char *fname;
+    int server_sending_fname = recv_int(sock);
+    if (server_sending_fname){
+        fname = recv_line(sock);
+    }
+
+    if (dest){
+        // TODO: Create directories for file name
+        local_fd = open(dest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    } else if (server_sending_fname){
+        // TODO: Create directories for file name
+        local_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    } else {
+        puts("The client didn't specify where to save the file,");
+        puts("and the server didn't specify a filename!");
+        free(fname);
+        exit(EXIT_FAILURE);
+    }
+
+    if (server_sending_fname){
+        free(fname);
+    }
 
     // receive file size
     int file_size = recv_int(sock);
@@ -368,10 +412,31 @@ void md5sum(char *filename, char *hexstring){
 }
 
 /**
+ * Seed rand with information from pid and clock/time.
+ * https://stackoverflow.com/a/323302/5183816
+ */
+void seed_rand(){
+    unsigned long a = clock();
+    unsigned long b = time(NULL);
+    unsigned long c = getpid();
+
+    a=a-b;  a=a-c;  a=a^(c >> 13);
+    b=b-c;  b=b-a;  b=b^(a << 8);
+    c=c-a;  c=c-b;  c=c^(b >> 13);
+    a=a-b;  a=a-c;  a=a^(c >> 12);
+    b=b-c;  b=b-a;  b=b^(a << 16);
+    c=c-a;  c=c-b;  c=c^(b >> 5);
+    a=a-b;  a=a-c;  a=a^(c >> 3);
+    b=b-c;  b=b-a;  b=b^(a << 10);
+    c=c-a;  c=c-b;  c=c^(b >> 15);
+
+    srand(c);
+}
+
+/**
  * Generate random temp file name.
  */
 void gen_temp_filename(char *tempfile){
-    srand(time(0));
     sprintf(tempfile, "/tmp/");
     int i;
     for(i = 5; i < 15; i++) {
@@ -380,102 +445,146 @@ void gen_temp_filename(char *tempfile){
 }
 
 /**
- * Adds a new file to the project's .Manifest
+ * Adds a new file to the project's .Manifest if not
+ * already there; otherwise marks the file with code "M"
+ * for modified.
+ *
  * The line is added in the form:
- * <version> <md5_hexdigest> <filename><\n>
+ * <code> <md5_hexdigest> <version> <filename><\n>
  */
-void add_files_to_manifest(char **filenames, int num_files){
-    int fd = open(".Manifest", O_RDWR | O_APPEND);
+void add_to_manifest(char *project, char *filename){
 
-    int i;
-    for (i = 0; i < num_files; i++){
-        char *filename = filenames[i];
+    // open manifest
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+    sprintf(manifest, "%s/.Manifest", project);
+    init_file_buf(info, manifest);
 
-        // hash file
-        char hexstring[33];
-        md5sum(filename, hexstring);
+    // open tempfile
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-        // create buf
-        int buf_size = strlen(hexstring) + strlen(filename) + strlen("0  \n ");
+    // hash new file to add
+    char hexstring[33];
+    md5sum(filename, hexstring);
+
+    // recreate manifest
+    read_file_until(info, '\n');
+    write(fout, info->data, strlen(info->data));
+    write(fout, "\n", 1);
+    int found_file = 0;
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof){
+            break;
+        }
+
+        char *code      = malloc(1+1);
+        char *version   = malloc(10+1);
+        char *hexdigest = malloc(32+1);
+        char *fname     = malloc(strlen(info->data)+1);
+        sscanf(info->data, "%s %s %s %s", code, hexdigest, version, fname);
+        if (!strcmp(filename, fname)){
+            found_file = 1;
+            write(fout, "M ", 2);
+            write(fout, hexdigest, strlen(hexdigest));
+            write(fout, " ", 1);
+            write(fout, version, strlen(version));
+            write(fout, " ", 1);
+            write(fout, fname, strlen(fname));
+            write(fout, "\n", 1);
+        } else{
+            write(fout, info->data, strlen(info->data));
+            write(fout, "\n", 1);
+        }
+        free(code);
+        free(version);
+        free(hexdigest);
+        free(fname);
+    }
+
+    if (!found_file){
+        int buf_size = strlen(hexstring) + strlen(filename) + strlen("A 0  \n ");
         char *data = malloc(buf_size);
-        sprintf(data, "0 %s %s\n", hexstring, filename);
-
-        // write "new file" indicator
-        write(fd, data, buf_size-1); // no null byte
+        sprintf(data, "A %s 0 %s\n", hexstring, filename);
+        write(fout, data, buf_size-1); // no null byte
         free(data);
     }
 
     // cleanup
-    close(fd);
+    close(fout);
+    rename(tempfile, manifest);
+    free(manifest);
+    clean_file_buf(info);
+    remove(tempfile);
 }
 
 /**
- * Removes the given files from .Manifest
+ * Marks the given file with code "R" in .Manifest.
+ * The line is added in the form:
+ * <code> <md5_hexdigest> <version> <filename><\n>
  */
-void remove_files_from_manifest(char **filenames, int num_files){
-    // create random temp filename - strlen("/tmp/1234567890") = 15
+void remove_from_manifest(char *project, char *filename){
+
+    // open manifest
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+    sprintf(manifest, "%s/.Manifest", project);
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+
+    // open temp filename - strlen("/tmp/1234567890") = 15
     char tempfile[15+1];
     gen_temp_filename(tempfile);
-
-    int fin = open(".Manifest", O_RDONLY);
     int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-    char *line = malloc(CHUNK_SIZE);
-    int line_len = CHUNK_SIZE;
-    int line_idx = 0;
-    int eof = 0;
-    while (!eof) {
-        int bytes_read = 0;
-        char *temp = read_file_chunk(fin, &bytes_read, &eof);
-        int i;
-        for (i = 0; i < bytes_read; i++){
-            // double buffer size if full
-            if (line_idx == line_len - 1){
-                line_len *= 2;
-                char *new_buf = realloc(line, line_len);
-                if (new_buf == NULL) {
-                    puts("Memory allocation failed");
-                    free(line);
-                    free(temp);
-                    exit(EXIT_FAILURE);
-                }
-                line = new_buf;
-            }
-
-            // copy one byte from temp to buf
-            line[line_idx++] = temp[i];
-
-            // check if reached newline
-            if (line[line_idx-1] == '\n'){
-                // check if any of filenames are on this line
-                line[line_idx-1] = '\0';
-                int j;
-                int found = 0;
-                for (j = 0; j < num_files; j++){
-                    if (strstr(line, filenames[j]) != NULL){
-                        found = 1;
-                        j = num_files;
-                    }
-                }
-
-                // write line to new file if not found
-                if (!found){
-                    write(fout, line, strlen(line));
-                    write(fout, "\n", 1);
-                }
-
-                // reset line buffer
-                line_idx = 0;
-            }
+    // recreate manifest
+    read_file_until(info, '\n');
+    write(fout, info->data, strlen(info->data));
+    write(fout, "\n", 1);
+    int found_file = 0;
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof){
+            break;
         }
-        free(temp);
-    }
-    free(line);
 
-    // cleanup and rename file
-    close(fin);
+        char *code      = malloc(1+1);
+        char *version   = malloc(10+1);
+        char *hexdigest = malloc(32+1);
+        char *fname     = malloc(strlen(info->data)+1);
+        sscanf(info->data, "%s %s %s %s", code, hexdigest, version, fname);
+        if (!strcmp(filename, fname)){
+            found_file = 1;
+            write(fout, "R ", 2);
+            write(fout, hexdigest, strlen(hexdigest));
+            write(fout, " ", 1);
+            write(fout, version, strlen(version));
+            write(fout, " ", 1);
+            write(fout, fname, strlen(fname));
+            write(fout, "\n", 1);
+        } else{
+            write(fout, info->data, strlen(info->data));
+            write(fout, "\n", 1);
+        }
+        free(code);
+        free(version);
+        free(hexdigest);
+        free(fname);
+    }
+
+    // cleanup
     close(fout);
-    rename(tempfile, ".Manifest");
+    rename(tempfile, manifest);
+    free(manifest);
+    clean_file_buf(info);
+    remove(tempfile);
+
+    // error condition
+    if (!found_file){
+        puts("Did not find file in .Manifest!");
+        exit(EXIT_FAILURE);
+    }
 }
 
 /**********************************************************************************
@@ -483,33 +592,12 @@ void remove_files_from_manifest(char **filenames, int num_files){
 ***********************************************************************************/
 
 /**
- * Checks if project exists locally by
- * reading project name from .Manifest
+ * Checks if project exists in repository.
  */
 void assert_project_exists_local(char *project){
     struct stat st = {0};
-    if (stat(".Manifest", &st) == -1){
-        puts(".Manifest file does not exist in current directory.");
-        exit(EXIT_FAILURE);
-    }
-
-    file_buf_t *file_buf = calloc(1, sizeof(file_buf_t));
-    file_buf->data = malloc(CHUNK_SIZE);
-    file_buf->remaining = malloc(CHUNK_SIZE);
-    file_buf->data_buf_size = CHUNK_SIZE;
-    file_buf->fd = open(".Manifest", O_RDONLY);
-
-    read_file_until(file_buf, ' ');
-    read_file_until(file_buf, '\n');
-    close(file_buf->fd);
-
-    int match = !strcmp(file_buf->data, project);
-    free(file_buf->remaining);
-    free(file_buf->data);
-    free(file_buf);
-
-    if (!match){
-        puts("Project in .Manifest doesn't match given project name.");
+    if (stat(project, &st) == -1){
+        printf("Project does not exist: %s\n", project);
         exit(EXIT_FAILURE);
     }
 }
@@ -523,74 +611,25 @@ void assert_project_exists_local(char *project){
  */
 void init_socket_server(int *sock, char *command){
 
-    // check if inside a project
-    const char *config_file = ".configure";
-    if(access(".Manifest", F_OK) != -1){
-        config_file = "../.configure";
-    }
-
     // check if file exists
-    if(access(config_file, F_OK) == -1){
+    if(access(".configure", F_OK) == -1){
         puts("Missing .configure file! Did you run configure?");
         exit(EXIT_FAILURE);
     }
 
     // read data from file
-    int fd = open(config_file, O_RDONLY);
-    if (fd == -1){
-        puts("Can't open .configure file!");
-        exit(EXIT_FAILURE);
-    }
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, ".configure");
 
-    char *buf = malloc(CHUNK_SIZE);
-    int buf_len = CHUNK_SIZE;
-    int buf_idx = 0;
-    int eof = 0;
+    // read hostname
+    read_file_until(info, ' ');
+    char *hostname = malloc(strlen(info->data)+1);
+    strcpy(hostname, info->data);
 
-    int reading_hostname = 1;
-    char *hostname;
-    int port;
-
-    while (!eof) {
-        int bytes_read = 0;
-        char *temp = read_file_chunk(fd, &bytes_read, &eof);
-        int i;
-        for (i = 0; i < bytes_read; i++){
-            // double buffer size if full
-            if (buf_idx == buf_len){
-                buf_len *= 2;
-                char *new_buf = realloc(buf, buf_len);
-                if (new_buf == NULL) {
-                    puts("Memory allocation failed");
-                    free(buf);
-                    free(temp);
-                    exit(EXIT_FAILURE);
-                }
-                buf = new_buf;
-            }
-
-            // copy one byte from temp to buf
-            buf[buf_idx++] = temp[i];
-
-            // check if reached newline
-            if (buf[buf_idx-1] == '\n'){
-                if (reading_hostname) {
-                    reading_hostname = 0;
-                    hostname = malloc(buf_idx);
-                    memcpy(hostname, buf, buf_idx-1);
-                    hostname[buf_idx-1] = '\0';
-                    buf_idx = 0;
-                } else {
-                    buf[buf_idx-1] = '\0';
-                    port = atoi(buf);
-                    buf_idx = 0;
-                }
-            }
-        }
-        free(temp);
-    }
-    free(buf);
-    close(fd);
+    // read port
+    read_file_until(info, '\n');
+    int port = atoi(info->data);
+    clean_file_buf(info);
 
     // create socket
     if ((*sock = socket(AF_INET, SOCK_STREAM, 0)) < 0){
@@ -607,6 +646,7 @@ void init_socket_server(int *sock, char *command){
         // try resolving hostname
         struct hostent *he;
         if ((he = gethostbyname(hostname)) == NULL) {
+            puts("Could not resolve hostname in .configure file");
             free(hostname);
             exit(EXIT_FAILURE);
         }
@@ -622,7 +662,7 @@ void init_socket_server(int *sock, char *command){
 
     // send command
     puts("Server connected");
-    sendline(*sock, command);
+    send_line(*sock, command);
 }
 
 /**
@@ -630,7 +670,7 @@ void init_socket_server(int *sock, char *command){
  * whether it already exists.
  */
 int server_project_exists(int sock, char *project){
-    sendline(sock, project);
+    send_line(sock, project);
     return recv_int(sock);
 }
 
@@ -639,28 +679,38 @@ int server_project_exists(int sock, char *project){
 ***********************************************************************************/
 
 /**
- * Receive project name and change into directory.
+ * Receive and return project name.
  * If should_create is set, then it creates the directory
  * if it doesn't exist.
- * Return whether the project exists on server.
+ *
+ * The returned pointer must be freed.
  */
-int set_create_project(int sock, int should_create){
-    char *project = recvline(sock);
+char *set_create_project(int sock, int should_create){
+    char *project = recv_line(sock);
 
     // check if project exists
     struct stat st = {0};
     int exists = (stat(project, &st) == -1) ? 0 : 1;
     send_int(sock, exists);
 
-    // change directory if it exists
-    if (exists){
-        chdir(project);
-    } else if (should_create) {
+    // if should_create but it already exists, error
+    // if !should_create but it doesn't exist, error
+    if ((should_create && exists) || (!should_create && !exists)){
+        free(project);
+        puts("Create was asked to either create when the project exists,");
+        puts("or to not create when the project doesn't exist!");
+        return NULL;
+    }
+
+    // create directory and Manifest if should create
+    if (should_create) {
         mkdir(project, 0755);
-        chdir(project);
 
         // create local .Manifest file
-        int manifest_fd = open(".Manifest", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+        sprintf(manifest, "%s/.Manifest", project);
+        int manifest_fd = open(manifest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        free(manifest);
 
         // write local .Manifest file
         int manifest_size = strlen(project) + strlen("0 \n");
@@ -670,16 +720,5 @@ int set_create_project(int sock, int should_create){
         close(manifest_fd);
         free(manifest_data);
     }
-    free(project);
-    return exists;
-}
-
-/**
- * Receive a filename from the client, then send
- * that file's data over the socket connection.
- */
-void send_file_to_client(int sock){
-    char *fname = recvline(sock);
-    send_file(fname, sock);
-    free(fname);
+    return project;
 }
