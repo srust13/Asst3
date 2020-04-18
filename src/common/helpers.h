@@ -3,7 +3,7 @@
 
 #define CHUNK_SIZE 1024
 
-typedef struct buf_socket_t {
+typedef struct file_buf_t {
     char *data;
     char *remaining;
 
@@ -11,20 +11,21 @@ typedef struct buf_socket_t {
     int remaining_size;
 
     int sock;
+    int fd;
+    int file_eof;
     pthread_t thread_id;
-} buf_socket_t;
+} file_buf_t;
 
-void sendline_ack(int sock, char *msg);
 
+void sendline(int sock, char *msg);
+char *recvline(int sock);
+void read_line(file_buf_t *info);
 void send_file(char *filename, int sock);
-void recv_file(int sock, char *fname);
-
-int server_project_exists(int sock, char *project);
-int recv_and_verify_project(buf_socket_t *conn);
-
-void set_socket(int *sock);
-void read_app_data_from_socket(buf_socket_t *conn, char delim, int num_bytes);
-
+void recv_file(int sock, char *dest);
+void add_files_to_manifest(char **filenames, int num_files);
+void remove_files_from_manifest(char **filenames, int num_files);
 void assert_project_exists_local(char *project);
-void add_files_to_manifest(char *project, char **filenames, int num_files);
-void remove_files_from_manifest(char *project, char **filenames, int num_files);
+void init_socket_server(int *sock, char *command);
+int server_project_exists(int sock, char *project);
+int set_create_project(int sock, int should_create);
+void gen_temp_filename(char *tempfile);

@@ -29,7 +29,7 @@ void checkout(char *project){
     puts("Checkout");
     printf("Project: %s\n", project);
 
-    set_socket(&sock);
+    init_socket_server(&sock, "checkout");
     close(sock);
 }
 
@@ -37,7 +37,7 @@ void update(char *project){
     puts("Update");
     printf("Project: %s\n", project);
 
-    set_socket(&sock);
+    init_socket_server(&sock, "update");
     close(sock);
 }
 
@@ -45,7 +45,7 @@ void upgrade(char *project){
     puts("Upgrade");
     printf("Project: %s\n", project);
 
-    set_socket(&sock);
+    init_socket_server(&sock, "upgrade");
     close(sock);
 }
 
@@ -53,7 +53,7 @@ void commit(char *project){
     puts("Commit");
     printf("Project: %s\n", project);
 
-    set_socket(&sock);
+    init_socket_server(&sock, "commit");
     close(sock);
 }
 
@@ -61,13 +61,12 @@ void push(char *project){
     puts("Push");
     printf("Project: %s\n", project);
 
-    set_socket(&sock);
+    init_socket_server(&sock, "push");
     close(sock);
 }
 
 void create(char *project){
-    set_socket(&sock);
-    sendline_ack(sock, "create");
+    init_socket_server(&sock, "create");
 
     // make sure project doesn't exist on server
     int proj_exists = server_project_exists(sock, project);
@@ -82,12 +81,10 @@ void create(char *project){
     mkdir(project, 0755);
 
     // receive remote .Manifest file
-    char *fname = malloc(strlen(project) + strlen(".Manifest") + 2);
-    sprintf(fname, "%s/.Manifest", project);
-    recv_file(sock, fname);
+    chdir(project);
+    recv_file(sock, ".Manifest");
 
     // cleanup
-    free(fname);
     close(sock);
     puts("Client gracefully disconnected from server");
 }
@@ -96,33 +93,62 @@ void destroy(char *project){
     puts("Destroy");
     printf("Project: %s\n", project);
 
-    set_socket(&sock);
+    init_socket_server(&sock, "destroy");
     close(sock);
 }
 
 void add(char *project, char *filename){
     assert_project_exists_local(project);
-    add_files_to_manifest(project, &filename, 1);
+    add_files_to_manifest(&filename, 1);
 }
 
 void remove_cmd(char *project, char *filename){
     assert_project_exists_local(project);
-    remove_files_from_manifest(project, &filename, 1);
+    remove_files_from_manifest(&filename, 1);
 }
 
 void currentversion(char *project){
-    puts("CurrentVersion");
-    printf("Project: %s\n", project);
+    init_socket_server(&sock, "currentversion");
 
-    set_socket(&sock);
-    close(sock);
+    // make sure project exists on server
+    int proj_exists = server_project_exists(sock, project);
+    if (proj_exists){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // receive .Manifest into a tempfile
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    recv_file(sock, tempfile);
+
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    info->fd = open(tempfile, O_RDONLY);
+    info->data = malloc(CHUNK_SIZE);
+    info->remaining = malloc(CHUNK_SIZE);
+    info->data_buf_size = CHUNK_SIZE;
+
+    // todo: print out stuff from tempfile before deleting
+    while (!info->file_eof){
+
+    }
+
+    // cleanup
+    free(info->remaining);
+    free(info->data);
+    if (info->fd) close(info->fd);
+    if (info->sock) close(info->sock);
+    free(info);
+    puts("Client gracefully disconnected from server");
 }
 
 void history(char *project){
     puts("History");
     printf("Project: %s\n", project);
 
-    set_socket(&sock);
+    init_socket_server(&sock, "history");
     close(sock);
 }
 
@@ -131,6 +157,6 @@ void rollback(char *project, char *version){
     printf("Project: %s\n", project);
     printf("Version: %s\n", version);
 
-    set_socket(&sock);
+    init_socket_server(&sock, "rollback");
     close(sock);
 }

@@ -12,7 +12,7 @@
 #define MAX_CONNS 10
 
 int server_fd;
-buf_socket_t conn_infos[MAX_CONNS];
+file_buf_t conn_infos[MAX_CONNS];
 size_t free_threads[MAX_CONNS];
 size_t free_threads_idx;
 size_t num_free_threads;
@@ -45,74 +45,59 @@ void sigint_handler(int s){
     exit(EXIT_SUCCESS);
 }
 
-void perform_cmd(buf_socket_t *conn){
+void perform_cmd(int sock){
 
     // read command
-    read_app_data_from_socket(conn, '\n', 0);
+    char *command = recvline(sock);
 
     // perform command
-    if (!strcmp(conn->data, "checkout")){
-        checkout(conn);
-    } else if (!strcmp(conn->data, "update")){
-        update(conn);
-    } else if (!strcmp(conn->data, "upgrade")){
-        upgrade(conn);
-    } else if (!strcmp(conn->data, "commit")){
-        commit(conn);
-    } else if (!strcmp(conn->data, "push")){
-        push(conn);
-    } else if (!strcmp(conn->data, "create")){
-        create(conn);
-    } else if (!strcmp(conn->data, "destroy")){
-        destroy(conn);
-    } else if (!strcmp(conn->data, "add")){
-        add(conn);
-    } else if (!strcmp(conn->data, "remove")){
-        remove_cmd(conn);
-    } else if (!strcmp(conn->data, "currentversion")){
-        currentversion(conn);
-    } else if (!strcmp(conn->data, "history")){
-        history(conn);
-    } else if (!strcmp(conn->data, "rollback")){
-        rollback(conn);
+    if (!strcmp(command, "checkout")){
+        checkout(sock);
+    } else if (!strcmp(command, "update")){
+        update(sock);
+    } else if (!strcmp(command, "upgrade")){
+        upgrade(sock);
+    } else if (!strcmp(command, "commit")){
+        commit(sock);
+    } else if (!strcmp(command, "push")){
+        push(sock);
+    } else if (!strcmp(command, "create")){
+        create(sock);
+    } else if (!strcmp(command, "destroy")){
+        destroy(sock);
+    } else if (!strcmp(command, "currentversion")){
+        currentversion(sock);
+    } else if (!strcmp(command, "history")){
+        history(sock);
+    } else if (!strcmp(command, "rollback")){
+        rollback(sock);
     } else {
-        printf("Invalid command: %s\n", conn->data);
-        close(conn->sock);
-        free(conn->data);
-        free(conn->remaining);
+        printf("Invalid command: %s\n", command);
+        free(command);
+        close(sock);
         exit(EXIT_FAILURE);
     }
+    free(command);
 }
 
 void *handle_connection(void *conninfo_idx){
 
     // get socket fd
     int conn_idx = *((int *) conninfo_idx);
-    buf_socket_t *conn = &(conn_infos[conn_idx]);
-
-    // initialize conn
-    conn->data = malloc(CHUNK_SIZE);
-    conn->data_buf_size = CHUNK_SIZE;
-
-    conn->remaining = malloc(CHUNK_SIZE);
-    conn->remaining_size = 0;
+    file_buf_t *conn = &(conn_infos[conn_idx]);
 
     // handle request
-    perform_cmd(conn);
+    perform_cmd(conn->sock);
 
     // cleanup
-    free(conn->data);
-    free(conn->remaining);
     close(conn->sock);
 
     puts("Client disconnected");
-
     pthread_mutex_lock(&free_threads_lock);
     size_t insert_idx = (conn_idx + num_free_threads++) % MAX_CONNS;
     free_threads[insert_idx] = conn_idx;
     pthread_mutex_unlock(&free_threads_lock);
     pthread_cond_signal(&free_threads_cond);
-
     return 0;
 }
 

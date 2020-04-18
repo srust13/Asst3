@@ -8,74 +8,53 @@
 
 #include "../common/helpers.h"
 
-void checkout(buf_socket_t *conn){
+void checkout(int sock){
     puts("Checkout");
 }
 
-void update(buf_socket_t *conn){
+void update(int sock){
     puts("Update");
 }
 
-void upgrade(buf_socket_t *conn){
+void upgrade(int sock){
     puts("Upgrade");
 }
 
-void commit(buf_socket_t *conn){
+void commit(int sock){
     puts("Commit");
 }
 
-void push(buf_socket_t *conn){
+void push(int sock){
     puts("Push");
 }
 
-void create(buf_socket_t *conn){
-
-    // read project
-    if (recv_and_verify_project(conn))
+void create(int sock){
+    // if project doesn't exist, create it
+    if (set_create_project(sock, 1))
         return;
-    char *project = conn->data;
 
-    // create local project folder
-    mkdir(project, 0755);
-
-    // open local .Manifest file
-    char *fname = malloc(strlen(project) + strlen(".Manifest") + 2);
-    sprintf(fname, "%s/.Manifest", project);
-    int manifest_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-    // write local .Manifest file
-    char manifest_data[] = "0\n";
-    int manifest_size = strlen(manifest_data);
-    write(manifest_fd, manifest_data, manifest_size);
-    close(manifest_fd);
-
-    // send .Manifest file to client
-    send_file(fname, conn->sock);
-
-    // cleanup
-    free(fname);
+    // send requested .Manifest to client
+    send_file(".Manifest", sock);
 }
 
-void destroy(buf_socket_t *conn){
+void destroy(int sock){
     puts("Destroy");
 }
 
-void add(buf_socket_t *conn){
-    puts("Add");
+void currentversion(int sock){
+    if (!set_create_project(sock, 0)){
+        puts("Project does not exist on server.");
+        return;
+    }
+
+    // send requested .Manifest to client
+    send_file(".Manifest", sock);
 }
 
-void remove_cmd(buf_socket_t *conn){
-    puts("Remove");
-}
-
-void currentversion(buf_socket_t *conn){
-    puts("CurrentVersion");
-}
-
-void history(buf_socket_t *conn){
+void history(int sock){
     puts("History");
 }
 
-void rollback(buf_socket_t *conn){
+void rollback(int sock){
     puts("Rollback");
 }

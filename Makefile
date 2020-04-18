@@ -39,14 +39,14 @@ all: bin/WTFserver bin/WTF
 create: MANIFEST=tests_out/client/huffman_dir/.Manifest
 create: all
 	@./tests/scripts/create.sh 1>/dev/null
-	@echo "897316929176464ebc9ad085f31e7284 ${MANIFEST}" | md5sum -c --quiet - && \
+	@echo "c71b94505304dbad1526882c36fae444 ${MANIFEST}" | md5sum -c --quiet - && \
 	 ( diff -qr tests_out/client/huffman_dir tests_out/server/huffman_dir && \
 	 echo ${GREEN}PASS${NC} ) || echo ${RED}FAIL${NC}
 
 add_remove: MANIFEST=tests_out/client/huffman_dir/.Manifest
 add_remove: create
 	@./tests/scripts/add_remove.sh 1>/dev/null
-	@(echo "e7fb17bdeb0e8a3fc018f11f17ad2a2c ${MANIFEST}" | md5sum -c --quiet -  && \
+	@(echo "d48b2aa69ffa5fac96679c6ea471b723 ${MANIFEST}" | md5sum -c --quiet -  && \
 	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
 
 run: create add_remove

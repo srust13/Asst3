@@ -16,6 +16,11 @@
                                   GENERAL HELPERS
 ***********************************************************************************/
 
+
+// ------------------------------------
+//        SEND / RECV / ACK
+// ------------------------------------
+
 /**
  * Acknowledge receipt of packet.
  */
@@ -60,11 +65,77 @@ void send_ack(int sock, void *msg, int msg_len){
  * Send newline-delimited message to server.
  * Wait for an ACK after sending a message.
  */
-void sendline_ack(int sock, char *msg){
+void sendline(int sock, char *msg){
     write(sock, msg, strlen(msg));
     write(sock, "\n", 1);
     wait_for_ack(sock);
 }
+
+/**
+ * Receive line from socket and ACK the message.
+ * The newline is replaced with a null-byte.
+ *
+ * The returned pointer must be freed.
+ */
+char *recvline(int sock){
+    // read chunks from fd until exit condition is reached
+    char *line = malloc(CHUNK_SIZE);
+    char *temp = malloc(CHUNK_SIZE);
+    int line_buf_size = CHUNK_SIZE;
+    int data_size = 0;
+
+    while (1){
+        int bytes_read = recv(sock, temp, CHUNK_SIZE, 0);
+
+        // ensure that data buffer has enough space
+        if (data_size + bytes_read >= line_buf_size){
+            line_buf_size *= 2;
+            char *new_buf = realloc(line, line_buf_size);
+            if (new_buf == NULL) {
+                puts("Memory allocation failed");
+                free(line);
+                close(sock);
+                exit(EXIT_FAILURE);
+            }
+            line = new_buf;
+        }
+
+        int i;
+        for (i = 0; i < bytes_read; i++) {
+            // copy temp to buf one byte at a time
+            line[data_size++] = temp[i];
+
+            // check exit condition
+            if (line[data_size-1] == '\n'){
+                line[data_size-1] = '\0';
+                free(temp);
+                ack(sock);
+                return line;
+            }
+        }
+    }
+}
+
+/**
+ * Receive an integer from socket.
+ */
+int recv_int(int sock){
+    int number;
+    recv_ack(sock, &number, sizeof(number), MSG_WAITALL);
+    return ntohl(number);
+}
+
+/**
+ * Send an integer to socket.
+ */
+void send_int(int sock, int num){
+    int num_to_send = htonl(num);
+    send_ack(sock, &num_to_send, sizeof(num_to_send));
+}
+
+// ------------------------------------
+//               FILES
+// ------------------------------------
 
 /**
  * Reads a chunk of data from a file.
@@ -100,16 +171,88 @@ char *read_file_chunk(int fd, int *bytes_read, int *eof){
 }
 
 /**
- * Send file
+ * Read until delim from a file. This file must end in the delim
+ * if you decide to reuse this function. It will be replaced with
+ * a null-byte, and any bytes remaining in the chunk after the delim
+ * are put into "remaining".
+ *
+ * Note: Since we read from the file in chunks,
+ * a previous call to read_until could have read multiple delims
+ * of data. The next delim would have been placed into info->remaining,
+ * so it's possible we should get the next delim from there instead of
+ * actually reading from the file.
+ */
+void read_file_until(file_buf_t *info, char delim){
+
+    // copy leftover data from "remaining" into "data"
+    memcpy(info->data, info->remaining, info->remaining_size);
+    int data_size = info->remaining_size;
+    info->remaining_size = 0;
+
+    // check if exit condition reached already
+    int i;
+    for (i = 0; i < data_size; i++){
+        if (info->data[i] == delim){
+            info->data[i] = '\0';
+            info->remaining_size = data_size-i-1;
+            memcpy(info->remaining, info->data+i+1, info->remaining_size);
+            return;
+        }
+    }
+
+    // read chunks from file until exit condition is reached
+    char *temp = malloc(CHUNK_SIZE);
+    while (1){
+        int bytes_read = read(info->fd, temp, CHUNK_SIZE);
+
+        // check if nothing left to read
+        if (bytes_read == 0){
+            info->file_eof = 1;
+            free(temp);
+            return;
+        }
+
+        // ensure that data buffer has enough space
+        if (data_size + bytes_read > info->data_buf_size){
+            info->data_buf_size *= 2;
+            char *new_buf = realloc(info->data, info->data_buf_size);
+            if (new_buf == NULL) {
+                puts("Memory allocation failed");
+                free(temp);
+                free(info->data);
+                free(info->remaining);
+                close(info->fd);
+                exit(EXIT_FAILURE);
+            }
+            info->data = new_buf;
+        }
+
+        int i;
+        for (i = 0; i < bytes_read; i++) {
+            // copy temp to buf one byte at a time
+            info->data[data_size++] = temp[i];
+
+            // check exit conditions
+            if (info->data[data_size-1] == delim){
+                info->data[data_size-1] = '\0';
+                info->remaining_size = bytes_read-i-1;
+                memcpy(info->remaining, temp+i+1, info->remaining_size);
+                free(temp);
+                return;
+            }
+        }
+    }
+}
+
+/**
+ * Send file over socket and wait for ACK.
  */
 void send_file(char *filename, int sock){
 
     // send file size
     struct stat st = {0};
     stat(filename, &st);
-    int file_size = st.st_size;
-    int file_size_nl = htonl(file_size);
-    send_ack(sock, &file_size_nl, sizeof(file_size_nl));
+    send_int(sock, st.st_size);
 
     // send file data
     int fd = open(filename, O_RDONLY, 0);
@@ -127,43 +270,29 @@ void send_file(char *filename, int sock){
 }
 
 /**
- * Receives a file from remote and
- * write it locally to the given filename.
+ * Receives a file from remote and write it
+ * locally to the given filename.
  */
-void recv_file(int sock, char *fname){
+void recv_file(int sock, char *dest){
 
     // open local file
-    int manifest_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    int local_fd = open(dest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // receive file size
-    int file_size = 0;
-    recv_ack(sock, &file_size, sizeof(file_size), MSG_WAITALL);
-    file_size = ntohl(file_size);
+    int file_size = recv_int(sock);
 
     // receive file bytes, then ACK the file received
     char *data = malloc(CHUNK_SIZE);
     while (file_size > 0){
         int bytes_read = recv(sock, data, CHUNK_SIZE, 0);
         file_size -= bytes_read;
-        write(manifest_fd, data, bytes_read);
+        write(local_fd, data, bytes_read);
     }
     ack(sock);
 
     // cleanup
     free(data);
-    close(manifest_fd);
-}
-
-/**
- * Checks if project exists locally.
- */
-void assert_project_exists_local(char *project){
-    int success = 0;
-    struct stat st = {0};
-    if (stat(project, &st) == -1){
-        puts("Local project does not exist");
-        exit(EXIT_FAILURE);
-    }
+    close(local_fd);
 }
 
 /**
@@ -193,11 +322,25 @@ void md5sum(char *filename, char *hexstring){
     for (i = 0; i < 16; i++) sprintf(hexstring+2*i, "%02X", out[i]);
 }
 
-void add_files_to_manifest(char *project, char **filenames, int num_files){
-    // create manifest path
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 2);
-    sprintf(manifest, "%s/.Manifest", project);
-    int fd = open(manifest, O_RDWR | O_APPEND);
+/**
+ * Generate random temp file name.
+ */
+void gen_temp_filename(char *tempfile){
+    srand(time(0));
+    sprintf(tempfile, "/tmp/");
+    int i;
+    for(i = 5; i < 15; i++) {
+        sprintf(tempfile + i, "%x", rand() % 16);
+    }
+}
+
+/**
+ * Adds a new file to the project's .Manifest
+ * The line is added in the form:
+ * <version> <md5_hexdigest> <filename><\n>
+ */
+void add_files_to_manifest(char **filenames, int num_files){
+    int fd = open(".Manifest", O_RDWR | O_APPEND);
 
     int i;
     for (i = 0; i < num_files; i++){
@@ -219,26 +362,17 @@ void add_files_to_manifest(char *project, char **filenames, int num_files){
 
     // cleanup
     close(fd);
-    free(manifest);
 }
 
-void remove_files_from_manifest(char *project, char **filenames, int num_files){
-    // seed random with time
-    srand(time(0));
-
-    // create manifest path
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 2);
-    sprintf(manifest, "%s/.Manifest", project);
-
+/**
+ * Removes the given files from .Manifest
+ */
+void remove_files_from_manifest(char **filenames, int num_files){
     // create random temp filename - strlen("/tmp/1234567890") = 15
     char tempfile[15+1];
-    sprintf(tempfile, "/tmp/");
-    int i;
-    for(i = 5; i < 15; i++) {
-        sprintf(tempfile + i, "%x", rand() % 16);
-    }
+    gen_temp_filename(tempfile);
 
-    int fin = open(manifest, O_RDONLY);
+    int fin = open(".Manifest", O_RDONLY);
     int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     char *line = malloc(CHUNK_SIZE);
@@ -293,13 +427,10 @@ void remove_files_from_manifest(char *project, char **filenames, int num_files){
     }
     free(line);
 
-    // rename file
+    // cleanup and rename file
     close(fin);
     close(fout);
-    rename(tempfile, manifest);
-
-    // cleanup
-    free(manifest);
+    rename(tempfile, ".Manifest");
 }
 
 /**********************************************************************************
@@ -307,11 +438,45 @@ void remove_files_from_manifest(char *project, char **filenames, int num_files){
 ***********************************************************************************/
 
 /**
- * Before any command besides "configure" is run, we first
+ * Checks if project exists locally by
+ * reading project name from .Manifest
+ */
+void assert_project_exists_local(char *project){
+    struct stat st = {0};
+    if (stat(".Manifest", &st) == -1){
+        puts(".Manifest file does not exist in current directory.");
+        exit(EXIT_FAILURE);
+    }
+
+    file_buf_t *file_buf = calloc(1, sizeof(file_buf_t));
+    file_buf->data = malloc(CHUNK_SIZE);
+    file_buf->remaining = malloc(CHUNK_SIZE);
+    file_buf->data_buf_size = CHUNK_SIZE;
+    file_buf->fd = open(".Manifest", O_RDONLY);
+
+    read_file_until(file_buf, ' ');
+    read_file_until(file_buf, '\n');
+    close(file_buf->fd);
+
+    int match = !strcmp(file_buf->data, project);
+    free(file_buf->remaining);
+    free(file_buf->data);
+    free(file_buf);
+
+    if (!match){
+        puts("Project in .Manifest doesn't match given project name.");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/**
+ * Before commands that need the server are run, we first
  * check to see if a .configure file exists. If so, read it
  * and attempt to connect to the server.
+ *
+ * Then, send a command to the server over the socket.
  */
-void set_socket(int *sock){
+void init_socket_server(int *sock, char *command){
 
     // check if file exists
     if(access(".configure", F_OK) == -1){
@@ -404,19 +569,18 @@ void set_socket(int *sock){
         sleep(3);
     }
 
+    // send command
     puts("Server connected");
+    sendline(*sock, "create");
 }
 
 /**
- * Sends project name to server and returns
+ * Send project name to server and return
  * whether it already exists.
  */
 int server_project_exists(int sock, char *project){
-    sendline_ack(sock, project);
-
-    int success = 0;
-    recv_ack(sock, &success, sizeof(success), MSG_WAITALL);
-    return ntohl(success);
+    sendline(sock, project);
+    return recv_int(sock);
 }
 
 /**********************************************************************************
@@ -424,101 +588,47 @@ int server_project_exists(int sock, char *project){
 ***********************************************************************************/
 
 /**
- * Receive project name and set it in conn->data.
+ * Receive project name and change into directory.
+ * If should_create is set, then it creates the directory
+ * if it doesn't exist.
  * Return whether the project exists on server.
  */
-int recv_and_verify_project(buf_socket_t *conn){
-    read_app_data_from_socket(conn, '\n', 0);
+int set_create_project(int sock, int should_create){
+    char *project = recvline(sock);
 
     // check if project exists
     struct stat st = {0};
-    int exists = (stat(conn->data, &st) == -1) ? htonl(0) : htonl(1);
-    send_ack(conn->sock, &exists, sizeof(exists));
+    int exists = (stat(project, &st) == -1) ? 0 : 1;
+    send_int(sock, exists);
+
+    // change directory if it exists
+    if (exists){
+        chdir(project);
+    } else if (should_create) {
+        mkdir(project, 0755);
+        chdir(project);
+
+        // create local .Manifest file
+        int manifest_fd = open(".Manifest", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+        // write local .Manifest file
+        int manifest_size = strlen(project) + strlen("0 \n");
+        char *manifest_data = malloc(manifest_size + 1);
+        sprintf(manifest_data, "0 %s\n", project);
+        write(manifest_fd, manifest_data, manifest_size);
+        close(manifest_fd);
+        free(manifest_data);
+    }
+    free(project);
     return exists;
 }
 
 /**
- * Reads chunks from socket until num_bytes has been read, or if
- * num_bytes is 0, then until delimiter is read. Any bytes left
- * in the chunk after the exit condition has been reached are
- * placed in conn->remaining. Delimiters are replaced with a
- * null byte. Finally, sends an ACK to indicate we have received
- * all data from the client.
- *
- * Note:
- * It is possible that this function doesn't read from
- * the socket at all. This occurs if there is existing data in
- * the "remaining" already satisfies the exit condition.
+ * Receive a filename from the client, then send
+ * that file's data over the socket connection.
  */
-void read_app_data_from_socket(buf_socket_t *conn, char delim, int num_bytes){
-
-    // copy leftover data from "remaining" into "data"
-    memcpy(conn->data, conn->remaining, conn->remaining_size);
-    int data_size = conn->remaining_size;
-    conn->remaining_size = 0;
-
-    // check if exit condition reached already
-    if (num_bytes != 0){
-        if (data_size >= num_bytes){
-            conn->remaining_size = data_size - num_bytes;
-            memcpy(conn->remaining, conn->data + num_bytes, conn->remaining_size);
-            ack(conn->sock);
-            return;
-        }
-    } else {
-        int i;
-        for (i = 0; i < data_size; i++){
-            if (conn->data[i] == delim){
-                conn->data[i] = '\0';
-                conn->remaining_size = data_size - i - 1;
-                memcpy(conn->remaining, conn->data + i + 1, conn->remaining_size);
-                ack(conn->sock);
-                return;
-            }
-        }
-    }
-
-    // read chunks from socket until exit condition is reached
-    char *temp = malloc(CHUNK_SIZE);
-    while (1){
-        int bytes_read = recv(conn->sock, temp, CHUNK_SIZE, 0);
-        // ensure that data buffer has enough space
-        if (data_size + bytes_read > conn->data_buf_size){
-            conn->data_buf_size *= 2;
-            char *new_buf = realloc(conn->data, conn->data_buf_size);
-            if (new_buf == NULL) {
-                puts("Memory allocation failed");
-                free(temp);
-                free(conn->data);
-                free(conn->remaining);
-                close(conn->sock);
-                exit(EXIT_FAILURE);
-            }
-            conn->data = new_buf;
-        }
-
-        int i;
-        for (i = 0; i < bytes_read; i++) {
-            // copy temp to buf one byte at a time
-            conn->data[data_size++] = temp[i];
-
-            // check exit conditions
-            if (num_bytes != 0){
-                if (data_size == num_bytes){
-                    conn->remaining_size = bytes_read-i-1;
-                    memcpy(conn->remaining, temp+i+1, conn->remaining_size);
-                    free(temp);
-                    ack(conn->sock);
-                    return;
-                }
-            } else if (conn->data[data_size-1] == delim){
-                conn->data[data_size-1] = '\0';
-                conn->remaining_size = bytes_read-i-1;
-                memcpy(conn->remaining, temp+i+1, conn->remaining_size);
-                free(temp);
-                ack(conn->sock);
-                return;
-            }
-        }
-    }
+void send_file_to_client(int sock){
+    char *fname = recvline(sock);
+    send_file(fname, sock);
+    free(fname);
 }
