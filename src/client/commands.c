@@ -29,7 +29,25 @@ void checkout(char *project){
     puts("Checkout");
     printf("Project: %s\n", project);
 
+    // error case if directory already exists on the client
+    DIR* dirp = opendir(project);
+    if(dirp != NULL){
+        puts("This project already exists locally");
+        exit(EXIT_FAILURE);
+    }
+
     init_socket_server(&sock, "checkout");
+    
+    // make sure project exists on server
+    int proj_exists = server_project_exists(sock, project);
+    if (!proj_exists){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    recv_directory(&sock, project);
     close(sock);
 }
 

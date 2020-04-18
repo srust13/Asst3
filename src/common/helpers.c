@@ -9,6 +9,8 @@
 #include <arpa/inet.h>
 #include <sys/stat.h>
 #include <openssl/md5.h>
+#include <sys/types.h>
+#include <dirent.h>
 
 #include "helpers.h"
 
@@ -295,7 +297,87 @@ void recv_file(int sock, char *dest){
     close(local_fd);
 }
 
-void sendDirectory() {}
+/**
+ * Sends directory over socket to client by going through a project specfic manifest and sending each file to client
+ */
+void send_directory(char *dirname, int sock){
+
+    // create a tar file for given directory
+    char *create_tar_cmd = malloc(strlen("tar -czvf ") + strlen(dirname) + strlen(".tar.gz ./") + strlen(dirname) + 1);
+    sprintf(create_tar_cmd, "tar -czvf %s.tar.gz ./%s", dirname, dirname);
+    system(create_tar_cmd);    
+    
+    // send tar file to client
+    char *dir_tar_name = malloc(strlen(dirname) + strlen(".tar.gz") + 1);
+    sprintf(dir_tar_name, "%s.tar.gz", dirname);
+    send_file(dir_tar_name);
+
+    // clean up (remove tar file)    
+    char *remove_tar_cmd = malloc(strlen("rm ") + strlen(dir_tar_name) + 1);
+    sprintf(remove_tar_cmd, "rm %s", dir_tar_name);
+    system(remove_tar_cmd);
+
+    free(create_tar_cmd);
+    free(remove_tar_cmd);
+    free(dir_tar_name)
+
+    /*
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+
+    char *manifestPath = malloc(strlen(".") + strlen(dirname) + strlen("/Manifest") + 1);
+    strcpy(manifestPath, ".");
+    strcat(manifestPath, dirname); 
+    strcat(manifestPath,"/Manifest"); 
+
+    // open manifest for that particular project
+    info->fd = open(manifestPath, O_RDONLY);
+    info->data = malloc(CHUNK_SIZE);
+    info->remaining = malloc(CHUNK_SIZE);
+    info->data_buf_size = CHUNK_SIZE;
+
+    // skip first line that just has the name of the project
+    read_file_until(info, '\n');
+    while (1){
+        read_file_until(info, ' '); 
+        read_file_until(info, ' '); 
+        read_file_until(info, '\n');   
+        send_file(info -> data, sock);   
+        
+        if (info->file_eof)
+            break;
+    }
+    puts("");
+
+    // cleanup
+    free(info->remaining);
+    free(info->data);
+    if (info->fd) close(info->fd);
+    if (info->sock) close(info->sock);
+    free(info);
+    */
+}
+
+/**
+ * Untar a project
+ * Error cases not dealt with: Configure not run
+ */
+void recv_directory(int sock, char *dirname){
+    
+    // recieve the tar file
+    char *dir_tar_name = malloc(strlen(dirname) + strlen(".tar.gz") + 1);
+    sprintf(dir_tar_name, "%s.tar.gz", dirname);
+
+    recv_file(sock, tar_dirname);
+
+    // untar it
+    char *untar_cmd = malloc(strlen("tar -xf ") + strlen(dir_tar_name));
+    sprintf(untar_cmd, "tar -xf %s", dir_tar_name);
+    system(untar_cmd);
+
+    // clean up
+    free(untar_cmd);
+    free(dir_tar_name);   
+}
 
 /**
  * Computes the md5sum of the given file.

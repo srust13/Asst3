@@ -10,10 +10,17 @@
 
 void checkout(int sock){
     puts("Checkout");
+
+    char *project = set_create_project(sock, 0);
+    if (!project)
+        return;
+
+    // send requested directory to client
+    send_directory(project, sock);
 }
 
 void update(int sock){
-    puts("Update");
+    puts("Update");    
 }
 
 void upgrade(int sock){
