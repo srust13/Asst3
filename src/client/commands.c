@@ -16,7 +16,7 @@ void configure(char *hostname, char *port){
     // create data
     int buf_len = strlen(hostname) + strlen(port) + 2;
     char *buf = malloc(buf_len + 1); // sprintf adds null terminator
-    sprintf(buf, "%s\n%s\n", hostname, port);
+    sprintf(buf, "%s %s\n", hostname, port);
 
     // write data to file
     int fd = open(".configure", O_WRONLY | O_CREAT | O_TRUNC, 0666);
@@ -69,8 +69,7 @@ void create(char *project){
     init_socket_server(&sock, "create");
 
     // make sure project doesn't exist on server
-    int proj_exists = server_project_exists(sock, project);
-    if (proj_exists){
+    if (server_project_exists(sock, project)){
         puts("Project already exists on server!");
         puts("Client disconnecting.");
         close(sock);
@@ -80,9 +79,8 @@ void create(char *project){
     // create local project folder
     mkdir(project, 0755);
 
-    // receive remote .Manifest file
-    chdir(project);
-    recv_file(sock, ".Manifest");
+    // receive remote provided .Manifest file
+    recv_file(sock, NULL);
 
     // cleanup
     close(sock);
@@ -99,20 +97,19 @@ void destroy(char *project){
 
 void add(char *project, char *filename){
     assert_project_exists_local(project);
-    add_files_to_manifest(&filename, 1);
+    add_to_manifest(project, filename);
 }
 
 void remove_cmd(char *project, char *filename){
     assert_project_exists_local(project);
-    remove_files_from_manifest(&filename, 1);
+    remove_from_manifest(project, filename);
 }
 
 void currentversion(char *project){
     init_socket_server(&sock, "currentversion");
 
     // make sure project exists on server
-    int proj_exists = server_project_exists(sock, project);
-    if (!proj_exists){
+    if (!server_project_exists(sock, project)){
         puts("Project doesn't exist on server!");
         puts("Client disconnecting.");
         close(sock);
@@ -125,10 +122,7 @@ void currentversion(char *project){
     recv_file(sock, tempfile);
 
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    info->fd = open(tempfile, O_RDONLY);
-    info->data = malloc(CHUNK_SIZE);
-    info->remaining = malloc(CHUNK_SIZE);
-    info->data_buf_size = CHUNK_SIZE;
+    init_file_buf(info, tempfile);
 
     // skip first line that just has the name of the project
     puts("\n----------------------------------------------");
@@ -139,19 +133,16 @@ void currentversion(char *project){
         read_file_until(info, ' ');
         if (info->file_eof)
             break;
-        printf("%s ", info->data);
         read_file_until(info, ' ');
+        read_file_until(info, ' ');
+        printf("%s ", info->data);
         read_file_until(info, '\n');
         printf("%s\n", info->data);
     }
     puts("");
 
     // cleanup
-    free(info->remaining);
-    free(info->data);
-    if (info->fd) close(info->fd);
-    if (info->sock) close(info->sock);
-    free(info);
+    clean_file_buf(info);
     remove(tempfile);
     puts("Client gracefully disconnected from server");
 }

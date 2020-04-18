@@ -46,7 +46,7 @@ create: all
 add_remove: MANIFEST=tests_out/client/huffman_dir/.Manifest
 add_remove: create
 	@./tests/scripts/add_remove.sh 1>/dev/null
-	@(echo "d48b2aa69ffa5fac96679c6ea471b723 ${MANIFEST}" | md5sum -c --quiet -  && \
+	@(echo "d3675e5d7625293a788597c22910c29c ${MANIFEST}" | md5sum -c --quiet -  && \
 	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
 
 run: create add_remove

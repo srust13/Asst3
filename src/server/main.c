@@ -46,9 +46,9 @@ void sigint_handler(int s){
 }
 
 void perform_cmd(int sock){
-
+    seed_rand();
     // read command
-    char *command = recvline(sock);
+    char *command = recv_line(sock);
 
     // perform command
     if (!strcmp(command, "checkout")){
