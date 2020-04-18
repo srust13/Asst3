@@ -30,9 +30,9 @@ void checkout(char *project){
     printf("Project: %s\n", project);
 
     // error case if directory already exists on the client
-    DIR* dirp = opendir(project);
-    if(dirp != NULL){
-        puts("This project already exists locally");
+    struct stat st = {0};
+    if (stat(project, &st) != -1){
+        puts("Project exist in current directory.");
         exit(EXIT_FAILURE);
     }
 
