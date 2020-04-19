@@ -811,3 +811,106 @@ void clean_manifest_line(manifest_line_t *ml){
     free(ml->hexdigest);
     free(ml->fname);
 }
+
+/**
+ * Generate a commit file from the given
+ * local Manifest file. Throws error if given
+ * server Manifest file has different version number.
+ *
+ * If a commit file already exists, just append changes to it.
+ * Let the server filter out the old commits.
+ *
+ * Returns success
+ */
+int generate_commit_file(char *commit, char *client_manifest, char *server_manifest){
+
+    // prepare local manifest for reading
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, client_manifest);
+
+    // open commit file for writing
+    int commit_fd = open(commit, O_WRONLY | O_CREAT | O_APPEND, 0644);
+
+    // create some buffers/structs
+    manifest_line_t *ml_local = malloc(sizeof(manifest_line_t));
+    manifest_line_t *ml_server = malloc(sizeof(manifest_line_t));
+
+    // for each line in manifest:
+    // 1. check if server's manifest differs
+    // 2. write line to commit, updating the hash
+    read_file_until(info, '\n'); // skip first line of manifest
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+
+        // get local line
+        char *local_line = info->data;
+        parse_manifest_line(ml_local, info->data);
+
+        // get line for fname in server manifest, if it's not a newly added file
+        if (strcmp(ml_local->code, "A")){
+            char *server_line = search_file_in_manifest(server_manifest, ml_local->fname);
+            if (!server_line){
+                puts("Couldn't find client filename in server filename during commit!");
+                close(commit_fd);
+                clean_file_buf(info);
+                clean_manifest_line(ml_local);
+                free(server_line);
+                free(ml_local);
+                free(ml_server);
+                return 0;
+            }
+            parse_manifest_line(ml_server, server_line);
+
+            // sanity check this filename
+            if (strcmp(ml_server->hexdigest, ml_local->hexdigest) && ml_server->version >= ml_local->version){
+                puts("Client must sync with repository before commiting changes!");
+                close(commit_fd);
+                clean_file_buf(info);
+                clean_manifest_line(ml_local);
+                clean_manifest_line(ml_server);
+                free(server_line);
+                free(ml_local);
+                free(ml_server);
+                return 0;
+            }
+            free(server_line);
+        }
+
+        // check local manifest line for special code
+        if (!strcmp(ml_local->code, "M") || !strcmp(ml_local->code, "R") || !strcmp(ml_local->code, "A")){
+
+                // if modify, create new hash and version number
+                char *newline;
+                if (!strcmp(ml_local->code, "M")){
+                    char new_digest[32+1];
+                    md5sum(ml_local->fname, new_digest);
+
+                    char *new_version = malloc(50);
+                    sprintf(new_version, "%d", atoi(ml_local->version) + 1);
+
+                    newline = create_manifest_line(ml_local->code, new_digest, new_version, ml_local->fname);
+                    free(new_version);
+                } else {
+                    newline = create_manifest_line(ml_local->code, ml_local->hexdigest, ml_local->version, ml_local->fname);
+                }
+
+                // write to .Commit file
+                write(commit_fd, newline, strlen(newline));
+                free(newline);
+
+                // output to stdout
+                printf("%s %s\n", ml_local->code, ml_local->fname);
+        }
+
+        clean_manifest_line(ml_server);
+        clean_manifest_line(ml_local);
+    }
+
+    close(commit_fd);
+    clean_file_buf(info);
+    free(ml_local);
+    free(ml_server);
+    return 1;
+}

@@ -90,7 +90,7 @@ void commit(char *project){
         exit(EXIT_FAILURE);
     }
 
-    // retrieve server .Manifest's version
+    // retrieve server .Manifest and parse version
     char tempfile[15+1];
     gen_temp_filename(tempfile);
     recv_file(sock, tempfile);
@@ -100,13 +100,14 @@ void commit(char *project){
     int server_manifest_version = atoi(info->data);
     clean_file_buf(info);
 
-    // retrieve client .Manifest version
+    // retrieve client .Manifest and parse version
     char *manifest = malloc(strlen(project) + strlen(".Manifest") + 1);
     info = calloc(1, sizeof(file_buf_t));
     init_file_buf(info, manifest);
     read_file_until(info, ' ');
     int client_manifest_version = atoi(info->data);
     clean_file_buf(info);
+    free(info);
 
     // verify .Manifest versions are equal
     if (server_manifest_version != client_manifest_version){
@@ -115,38 +116,35 @@ void commit(char *project){
         send_int(sock, 0);
         free(update);
         free(manifest);
+        remove(tempfile);
         close(sock);
         exit(EXIT_FAILURE);
     }
-    send_int(sock, 1);
 
     // create .Commit file
     char *commit = malloc(strlen(project) + strlen(".Commit") + 1);
-    int commit_fd = open(commit, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-    // for each line in manifest, check if server's manifest differs
-    init_file_buf(info, manifest);
-    read_file_until(info, '\n'); // skip first line of manifest
-
-    manifest_line_t *ml = malloc(sizeof(manifest_line_t));
-    while (1){
-        read_file_until(info, '\n');
-        if (info->file_eof)
-            break;
-
-        // parse local .Manifest's line
-        char *local_line = info->data;
-        parse_manifest_line(ml, info->data);
-
-        // search for fname in server manifest
-        char *server_line = search_file_in_manifest(tempfile, ml->fname);
-        clean_manifest_line(ml);
+    if (!generate_commit_file(commit, manifest, tempfile)){
+        send_int(sock, 0);
+        remove(commit);
+        close(sock);
+        free(update);
+        free(manifest);
+        free(commit);
+        remove(tempfile);
+        exit(EXIT_FAILURE);
     }
-    free(ml);
 
+    // send success
+    send_int(sock, 1);
+
+    // send commit file to server
+    send_file(commit, sock, 1);
+
+    // cleanup
     free(update);
     free(manifest);
     free(commit);
+    remove(tempfile);
     close(sock);
 }
 
