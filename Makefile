@@ -49,7 +49,11 @@ add_remove: create
 	@(echo "d3675e5d7625293a788597c22910c29c ${MANIFEST}" | md5sum -c --quiet -  && \
 	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
 
-run: create add_remove
+currentversion: add_remove
+	@(./tests/scripts/currentversion.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+
+run: currentversion
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure

@@ -26,10 +26,24 @@ void configure(char *hostname, char *port){
 }
 
 void checkout(char *project){
-    puts("Checkout");
-    printf("Project: %s\n", project);
 
+    // check if project already exists locally
+    struct stat st = {0};
+    if (stat(project, &st) != -1){
+        puts("Project already exists in local repository.");
+        exit(EXIT_FAILURE);
+    }
+
+    // check if project exists on server
     init_socket_server(&sock, "checkout");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    recv_directory(sock, project);
     close(sock);
 }
 
@@ -88,11 +102,15 @@ void create(char *project){
 }
 
 void destroy(char *project){
-    puts("Destroy");
-    printf("Project: %s\n", project);
-
     init_socket_server(&sock, "destroy");
+    if (!server_project_exists(sock, project)){
+        puts("Project does not exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
     close(sock);
+    puts("Client gracefully disconnected from server");
 }
 
 void add(char *project, char *filename){
