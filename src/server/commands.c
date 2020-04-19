@@ -9,18 +9,14 @@
 #include "../common/helpers.h"
 
 void checkout(int sock){
-    puts("Checkout");
-
     char *project = set_create_project(sock, 0);
     if (!project)
         return;
-
-    // send requested directory to client
-    send_directory(project, sock);
+    send_directory(sock, project);
 }
 
 void update(int sock){
-    puts("Update");    
+    puts("Update");
 }
 
 void upgrade(int sock){

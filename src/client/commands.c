@@ -26,21 +26,17 @@ void configure(char *hostname, char *port){
 }
 
 void checkout(char *project){
-    puts("Checkout");
-    printf("Project: %s\n", project);
 
-    // error case if directory already exists on the client
+    // check if project already exists locally
     struct stat st = {0};
     if (stat(project, &st) != -1){
-        puts("Project exist in current directory.");
+        puts("Project already exists in local repository.");
         exit(EXIT_FAILURE);
     }
 
+    // check if project exists on server
     init_socket_server(&sock, "checkout");
-    
-    // make sure project exists on server
-    int proj_exists = server_project_exists(sock, project);
-    if (!proj_exists){
+    if (!server_project_exists(sock, project)){
         puts("Project doesn't exist on server!");
         puts("Client disconnecting.");
         close(sock);
