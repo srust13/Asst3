@@ -47,7 +47,15 @@ void create(int sock){
 }
 
 void destroy(int sock){
-    puts("Destroy");
+    char *project = set_create_project(sock, 0);
+    if (!project)
+        return;
+
+    char *cmd = malloc(strlen("rm -rf ") + strlen(project) + 1);
+    sprintf(cmd, "rm -rf %s", project);
+    system(cmd);
+    free(project);
+    free(cmd);
 }
 
 void currentversion(int sock){
