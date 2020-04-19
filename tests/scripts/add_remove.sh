@@ -15,3 +15,4 @@ echo "qrstuvwx" > huffman_dir/file3
 # remove one file
 rm huffman_dir/file2
 ../../bin/WTF remove huffman_dir huffman_dir/file2
+exit 0
