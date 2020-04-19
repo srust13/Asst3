@@ -18,9 +18,19 @@ typedef struct file_buf_t {
     pthread_t thread_id;
 } file_buf_t;
 
+typedef struct manifest_line_t {
+    char *code;
+    char *version;
+    char *hexdigest;
+    char *fname;
+} manifest_line_t;
+
+int file_exists_local(char *project, char *fname);
 void init_file_buf(file_buf_t *info, char *filename);
 void clean_file_buf(file_buf_t *info);
 
+void send_int(int sock, int num);
+int recv_int(int sock);
 void send_line(int sock, char *msg);
 char *recv_line(int sock);
 void read_file_until(file_buf_t *info, char delim);
@@ -35,3 +45,8 @@ void init_socket_server(int *sock, char *command);
 int server_project_exists(int sock, char *project);
 char *set_create_project(int sock, int should_create);
 void gen_temp_filename(char *tempfile);
+
+char *search_file_in_manifest(char *manifest, char *search);
+char *create_manifest_line(char *code, char *hexdigest, char *version, char *fname);
+void parse_manifest_line(manifest_line_t *ml, char *line);
+void clean_manifest_line(manifest_line_t *ml);

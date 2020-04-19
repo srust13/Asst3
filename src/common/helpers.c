@@ -139,6 +139,14 @@ void send_int(int sock, int num){
 //               FILES
 // ------------------------------------
 
+int file_exists_local(char *project, char *fname){
+    char *full_fname = malloc(strlen(project) + strlen(fname) + 1);
+    sprintf(full_fname, "%s/%s", project, fname);
+    int found = access(full_fname, F_OK) != -1;
+    free(full_fname);
+    return found;
+}
+
 void init_file_buf(file_buf_t *info, char *filename) {
     info->fd = open(filename, O_RDONLY);
     info->data = malloc(CHUNK_SIZE);
@@ -470,158 +478,6 @@ void gen_temp_filename(char *tempfile){
     }
 }
 
-/**
- * Adds a new file to the project's .Manifest if not
- * already there; otherwise marks the file with code "M"
- * for modified.
- *
- * The line is added in the form:
- * <code> <md5_hexdigest> <version> <filename><\n>
- */
-void add_to_manifest(char *project, char *filename){
-
-    // open manifest
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
-    sprintf(manifest, "%s/.Manifest", project);
-    init_file_buf(info, manifest);
-    
-    // open tempfile
-    char tempfile[15+1];
-    gen_temp_filename(tempfile);
-    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-    // hash new file to add
-    char hexstring[33];
-    md5sum(filename, hexstring);
-
-    // recreate manifest
-    read_file_until(info, '\n');
-    write(fout, info->data, strlen(info->data));
-    write(fout, "\n", 1);
-    int found_file = 0;
-    while (1){
-        read_file_until(info, '\n');
-        if (info->file_eof){
-            break;
-        }
-
-        char *code      = malloc(1+1);
-        char *version   = malloc(10+1);
-        char *hexdigest = malloc(32+1);
-        char *fname     = malloc(strlen(info->data)+1);
-        sscanf(info->data, "%s %s %s %s", code, hexdigest, version, fname);
-        if (!strcmp(filename, fname)){
-            found_file = 1;
-            write(fout, "M ", 2);
-            write(fout, hexdigest, strlen(hexdigest));
-            write(fout, " ", 1);
-            write(fout, version, strlen(version));
-            write(fout, " ", 1);
-            write(fout, fname, strlen(fname));
-            write(fout, "\n", 1);
-        } else{
-            write(fout, info->data, strlen(info->data));
-            write(fout, "\n", 1);
-        }
-        free(code);
-        free(version);
-        free(hexdigest);
-        free(fname);
-    }
-
-    if (!found_file){
-        int buf_size = strlen(hexstring) + strlen(filename) + strlen("A 0  \n ");
-        char *data = malloc(buf_size);
-        sprintf(data, "A %s 0 %s\n", hexstring, filename);
-        write(fout, data, buf_size-1); // no null byte
-        free(data);
-    }
-
-    // cleanup
-    close(fout);
-    //rename(tempfile, manifest);
-    char *mv_cmd = malloc(strlen("mv ") + strlen(tempfile) + strlen(" ") + strlen(manifest) + 1);
-    sprintf(mv_cmd, "mv %s %s", tempfile, manifest);
-    system(mv_cmd);
-    free(manifest);
-    free(mv_cmd);
-    clean_file_buf(info);
-    remove(tempfile);
-}
-
-/**
- * Marks the given file with code "R" in .Manifest.
- * The line is added in the form:
- * <code> <md5_hexdigest> <version> <filename><\n>
- */
-void remove_from_manifest(char *project, char *filename){
-
-    // open manifest
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
-    sprintf(manifest, "%s/.Manifest", project);
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
-
-    // open temp filename - strlen("/tmp/1234567890") = 15
-    char tempfile[15+1];
-    gen_temp_filename(tempfile);
-    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-    // recreate manifest
-    read_file_until(info, '\n');
-    write(fout, info->data, strlen(info->data));
-    write(fout, "\n", 1);
-    int found_file = 0;
-    while (1){
-        read_file_until(info, '\n');
-        if (info->file_eof){
-            break;
-        }
-
-        char *code      = malloc(1+1);
-        char *version   = malloc(10+1);
-        char *hexdigest = malloc(32+1);
-        char *fname     = malloc(strlen(info->data)+1);
-        sscanf(info->data, "%s %s %s %s", code, hexdigest, version, fname);
-        if (!strcmp(filename, fname)){
-            found_file = 1;
-            write(fout, "R ", 2);
-            write(fout, hexdigest, strlen(hexdigest));
-            write(fout, " ", 1);
-            write(fout, version, strlen(version));
-            write(fout, " ", 1);
-            write(fout, fname, strlen(fname));
-            write(fout, "\n", 1);
-        } else{
-            write(fout, info->data, strlen(info->data));
-            write(fout, "\n", 1);
-        }
-        free(code);
-        free(version);
-        free(hexdigest);
-        free(fname);
-    }
-
-    // cleanup
-    close(fout);
-    //rename(tempfile, manifest);
-    char *mv_cmd = malloc(strlen("mv ") + strlen(tempfile) + strlen(" ") + strlen(manifest) + 1);
-    sprintf(mv_cmd, "mv %s %s", tempfile, manifest);
-    system(mv_cmd);
-    
-    free(manifest);
-    free(mv_cmd);
-    clean_file_buf(info);
-    remove(tempfile);
-
-    // error condition
-    if (!found_file){
-        puts("Did not find file in .Manifest!");
-        exit(EXIT_FAILURE);
-    }
-}
-
 /**********************************************************************************
                                   CLIENT HELPERS
 ***********************************************************************************/
@@ -756,4 +612,202 @@ char *set_create_project(int sock, int should_create){
         free(manifest_data);
     }
     return project;
+}
+
+/**********************************************************************************
+                                  MANIFEST HELPERS
+***********************************************************************************/
+
+/**
+ * Adds a new file to the project's .Manifest if not
+ * already there; otherwise marks the file with code "M"
+ * for modified.
+ *
+ * The line is added in the form:
+ * <code> <md5_hexdigest> <version> <filename><\n>
+ */
+void add_to_manifest(char *project, char *filename){
+
+    // open manifest
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+    sprintf(manifest, "%s/.Manifest", project);
+    init_file_buf(info, manifest);
+
+    // open tempfile
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    // hash new file to add
+    char hexstring[33];
+    md5sum(filename, hexstring);
+
+    // recreate manifest
+    read_file_until(info, '\n');
+    write(fout, info->data, strlen(info->data));
+    write(fout, "\n", 1);
+    manifest_line_t *ml = malloc(sizeof(manifest_line_t));
+    int found_file = 0;
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof){
+            break;
+        }
+
+        parse_manifest_line(ml, info->data);
+        if (!strcmp(filename, ml->fname)){
+            found_file = 1;
+            char *out_buf = create_manifest_line("M", ml->hexdigest, ml->version, ml->fname);
+            write(fout, out_buf, strlen(out_buf));
+            free(out_buf);
+        } else{
+            write(fout, info->data, strlen(info->data));
+            write(fout, "\n", 1);
+        }
+        clean_manifest_line(ml);
+    }
+    free(ml);
+
+    if (!found_file){
+        int buf_size = strlen(hexstring) + strlen(filename) + strlen("A 0  \n ");
+        char *data = malloc(buf_size);
+        sprintf(data, "A %s 0 %s\n", hexstring, filename);
+        write(fout, data, buf_size-1); // no null byte
+        free(data);
+    }
+
+    // cleanup
+    close(fout);
+    //rename(tempfile, manifest);
+    char *mv_cmd = malloc(strlen("mv ") + strlen(tempfile) + strlen(" ") + strlen(manifest) + 1);
+    sprintf(mv_cmd, "mv %s %s", tempfile, manifest);
+    system(mv_cmd);
+    free(manifest);
+    free(mv_cmd);
+    clean_file_buf(info);
+    remove(tempfile);
+}
+
+/**
+ * Marks the given file with code "R" in .Manifest.
+ * The line is added in the form:
+ * <code> <md5_hexdigest> <version> <filename><\n>
+ */
+void remove_from_manifest(char *project, char *filename){
+
+    // open manifest
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+    sprintf(manifest, "%s/.Manifest", project);
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+
+    // open temp filename - strlen("/tmp/1234567890") = 15
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    // recreate manifest
+    read_file_until(info, '\n');
+    write(fout, info->data, strlen(info->data));
+    write(fout, "\n", 1);
+    int found_file = 0;
+    manifest_line_t *ml = malloc(sizeof(manifest_line_t));
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof){
+            break;
+        }
+
+        parse_manifest_line(ml, info->data);
+        if (!strcmp(filename, ml->fname)){
+            found_file = 1;
+            char *out_buf = create_manifest_line("R", ml->hexdigest, ml->version, ml->fname);
+            write(fout, out_buf, strlen(out_buf));
+            free(out_buf);
+        } else{
+            write(fout, info->data, strlen(info->data));
+            write(fout, "\n", 1);
+        }
+        clean_manifest_line(ml);
+    }
+
+    // cleanup
+    close(fout);
+    char *mv_cmd = malloc(
+        strlen("mv ") + strlen(tempfile) +
+        strlen(" ") + strlen(manifest) + 1);
+    sprintf(mv_cmd, "mv %s %s", tempfile, manifest);
+    system(mv_cmd);
+
+    free(manifest);
+    free(mv_cmd);
+    clean_file_buf(info);
+    remove(tempfile);
+
+    // error condition
+    if (!found_file){
+        puts("Did not find file in .Manifest!");
+        exit(EXIT_FAILURE);
+    }
+}
+
+/**
+ * Searches for the given filename in the
+ * .Manifest file. If found, returns the line.
+ *
+ * The returned pointer must be freed.
+ */
+char *search_file_in_manifest(char *manifest, char *search){
+
+    // search for filename in each line of manifest
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+
+        if (strstr(info->data, search)){
+            char *line = strdup(info->data);
+            clean_file_buf(info);
+            return line;
+        }
+    }
+    clean_file_buf(info);
+    return NULL;
+}
+
+/**
+ * Creates a buffer with the given manifest line parameters.
+ * The returned pointer must be freed.
+ */
+char *create_manifest_line(char *code, char *hexdigest, char *version, char *fname){
+    int out_buf_len = 2 + strlen(hexdigest) + 1 +
+        strlen(version) + 1 + strlen(fname) + 1;
+    char *out_buf = malloc(out_buf_len+1);
+    sprintf(out_buf, "%s %s %s %s\n",
+        code, hexdigest, version, fname);
+    return out_buf;
+}
+
+/**
+ * Parses a manifest line into components.
+ */
+void parse_manifest_line(manifest_line_t *ml, char *line){
+    ml->code      = malloc(1+1);
+    ml->version   = malloc(10+1);
+    ml->hexdigest = malloc(32+1);
+    ml->fname     = malloc(strlen(line)+1);
+    sscanf(line, "%s %s %s %s", ml->code, ml->hexdigest, ml->version, ml->fname);
+}
+
+/**
+ * Clean a manifest line's components.
+ */
+void clean_manifest_line(manifest_line_t *ml){
+    free(ml->code);
+    free(ml->version);
+    free(ml->hexdigest);
+    free(ml->fname);
 }
