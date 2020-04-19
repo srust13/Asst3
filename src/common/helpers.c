@@ -10,6 +10,7 @@
 #include <sys/stat.h>
 #include <openssl/md5.h>
 #include <sys/types.h>
+#include <errno.h>
 
 #include "helpers.h"
 
@@ -260,6 +261,23 @@ void read_file_until(file_buf_t *info, char delim){
 }
 
 /**
+ * Recursively make directories for a file path.
+ * https://stackoverflow.com/a/9210960/5183816
+ */
+void mkpath(char* file_path) {
+    for (char* p = strchr(file_path + 1, '/'); p; p = strchr(p + 1, '/')) {
+        *p = '\0';
+        if (mkdir(file_path, 0755) == -1) {
+            if (errno != EEXIST) {
+                puts("Error while creating path");
+                exit(EXIT_FAILURE);
+            }
+        }
+        *p = '/';
+    }
+}
+
+/**
  * Send file over socket and wait for ACK.
  */
 void send_file(char *filename, int sock, int send_filename){
@@ -307,10 +325,10 @@ void recv_file(int sock, char *dest){
     }
 
     if (dest){
-        // TODO: Create directories for file name
+        mkpath(dest);
         local_fd = open(dest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     } else if (server_sending_fname){
-        // TODO: Create directories for file name
+        mkpath(fname);
         local_fd = open(fname, O_WRONLY | O_CREAT | O_TRUNC, 0644);
     } else {
         puts("The client didn't specify where to save the file,");
@@ -341,46 +359,55 @@ void recv_file(int sock, char *dest){
 }
 
 /**
- * Sends directory over socket to client by going through a project specfic manifest and sending each file to client
+ * Sends directory over socket to client.
+ * Makes use of system tar command with
+ * gzip compression.
  */
-void send_directory(char *dirname, int sock){
+void send_directory(int sock, char *dirname){
 
     // create a tar file for given directory
-    char *create_tar_cmd = malloc(strlen("tar -czvf ") + strlen(dirname) + strlen(".tar.gz ./") + strlen(dirname) + 1);
-    sprintf(create_tar_cmd, "tar -czvf %s.tar.gz ./%s", dirname, dirname);
-    system(create_tar_cmd);    
-    
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    char *create_tar_cmd = malloc(
+        strlen("tar -czf ") + strlen(tempfile) +
+        strlen(".tar.gz ./") + strlen(dirname) + 1
+    );
+    sprintf(create_tar_cmd, "tar -czf %s.tar.gz ./%s", dirname, dirname);
+    system(create_tar_cmd);
+
     // send tar file to client
-    char *dir_tar_name = malloc(strlen(dirname) + strlen(".tar.gz") + 1);
+    char *dir_tar_name = malloc(strlen(tempfile) + strlen(".tar.gz") + 1);
     sprintf(dir_tar_name, "%s.tar.gz", dirname);
     send_file(dir_tar_name, sock, 0);
 
-    // clean up (remove tar file)    
+    // cleanup
     remove(dir_tar_name);
     free(create_tar_cmd);
     free(dir_tar_name);
 }
 
 /**
- * Untar a project
+ * Receive a directory from over the network.
+ * Untar and unzip the file received.
  */
 void recv_directory(int sock, char *dirname){
-    
-    // recieve the tar file
-    char *dir_tar_name = malloc(strlen(dirname) + strlen(".tar.gz") + 1);
-    sprintf(dir_tar_name, "%s.tar.gz", dirname);
 
+    // recieve the tar file
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    char *dir_tar_name = malloc(strlen(tempfile) + strlen(".tar.gz") + 1);
+    sprintf(dir_tar_name, "%s.tar.gz", tempfile);
     recv_file(sock, dir_tar_name);
 
-    // untar it
-    char *untar_cmd = malloc(strlen("tar -xf ") + strlen(dir_tar_name) + 1);
-    sprintf(untar_cmd, "tar -xf %s", dir_tar_name);
+    // untar and unzip it here in repository
+    char *untar_cmd = malloc(strlen("tar -xzf ") + strlen(dir_tar_name) + 1);
+    sprintf(untar_cmd, "tar -xzf %s", dir_tar_name);
     system(untar_cmd);
 
     // clean up
     remove(dir_tar_name);
     free(untar_cmd);
-    free(dir_tar_name);   
+    free(dir_tar_name);
 }
 
 /**
