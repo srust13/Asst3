@@ -140,7 +140,7 @@ void send_int(int sock, int num){
 // ------------------------------------
 
 int file_exists_local(char *project, char *fname){
-    char *full_fname = malloc(strlen(project) + strlen(fname) + 1);
+    char *full_fname = malloc(strlen(project) + 1 + strlen(fname) + 1);
     sprintf(full_fname, "%s/%s", project, fname);
     int found = access(full_fname, F_OK) != -1;
     free(full_fname);
@@ -310,6 +310,7 @@ void send_file(char *filename, int sock, int send_filename){
         int bytes_read = 0;
         char *data = read_file_chunk(fd, &bytes_read, &eof);
         write(sock, data, bytes_read);
+        free(data);
     }
     close(fd);
 
@@ -598,7 +599,7 @@ char *set_create_project(int sock, int should_create){
         mkdir(project, 0755);
 
         // create local .Manifest file
-        char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+        char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
         sprintf(manifest, "%s/.Manifest", project);
         int manifest_fd = open(manifest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         free(manifest);
@@ -630,7 +631,7 @@ void add_to_manifest(char *project, char *filename){
 
     // open manifest
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
     init_file_buf(info, manifest);
 
@@ -658,7 +659,7 @@ void add_to_manifest(char *project, char *filename){
         parse_manifest_line(ml, info->data);
         if (!strcmp(filename, ml->fname)){
             found_file = 1;
-            char *out_buf = create_manifest_line("M", ml->hexdigest, ml->version, ml->fname);
+            char *out_buf = generate_manifest_line("M", ml->hexdigest, ml->version, ml->fname);
             write(fout, out_buf, strlen(out_buf));
             free(out_buf);
         } else{
@@ -670,10 +671,10 @@ void add_to_manifest(char *project, char *filename){
     free(ml);
 
     if (!found_file){
-        int buf_size = strlen(hexstring) + strlen(filename) + strlen("A 0  \n ");
-        char *data = malloc(buf_size);
+        int buf_size = strlen(hexstring) + strlen(filename) + strlen("A 0  \n");
+        char *data = malloc(buf_size + 1);
         sprintf(data, "A %s 0 %s\n", hexstring, filename);
-        write(fout, data, buf_size-1); // no null byte
+        write(fout, data, buf_size);
         free(data);
     }
 
@@ -690,14 +691,14 @@ void add_to_manifest(char *project, char *filename){
 }
 
 /**
- * Marks the given file with code "R" in .Manifest.
+ * Marks the given file with code "D" in .Manifest.
  * The line is added in the form:
  * <code> <md5_hexdigest> <version> <filename><\n>
  */
 void remove_from_manifest(char *project, char *filename){
 
     // open manifest
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
+    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
     init_file_buf(info, manifest);
@@ -722,7 +723,7 @@ void remove_from_manifest(char *project, char *filename){
         parse_manifest_line(ml, info->data);
         if (!strcmp(filename, ml->fname)){
             found_file = 1;
-            char *out_buf = create_manifest_line("R", ml->hexdigest, ml->version, ml->fname);
+            char *out_buf = generate_manifest_line("D", ml->hexdigest, ml->version, ml->fname);
             write(fout, out_buf, strlen(out_buf));
             free(out_buf);
         } else{
@@ -782,8 +783,8 @@ char *search_file_in_manifest(char *manifest, char *search){
  * Creates a buffer with the given manifest line parameters.
  * The returned pointer must be freed.
  */
-char *create_manifest_line(char *code, char *hexdigest, char *version, char *fname){
-    int out_buf_len = 2 + strlen(hexdigest) + 1 +
+char *generate_manifest_line(char *code, char *hexdigest, char *version, char *fname){
+    int out_buf_len = strlen(code) + 1 + strlen(hexdigest) + 1 +
         strlen(version) + 1 + strlen(fname) + 1;
     char *out_buf = malloc(out_buf_len+1);
     sprintf(out_buf, "%s %s %s %s\n",
@@ -845,66 +846,58 @@ int generate_commit_file(char *commit, char *client_manifest, char *server_manif
             break;
 
         // get local line
-        char *local_line = info->data;
         parse_manifest_line(ml_local, info->data);
 
-        // get line for fname in server manifest, if it's not a newly added file
-        if (strcmp(ml_local->code, "A")){
+        // if file was modified, get line for fname in server manifest
+        if (!strcmp(ml_local->code, "M")){
             char *server_line = search_file_in_manifest(server_manifest, ml_local->fname);
-            if (!server_line){
-                puts("Couldn't find client filename in server filename during commit!");
-                close(commit_fd);
-                clean_file_buf(info);
-                clean_manifest_line(ml_local);
-                free(server_line);
-                free(ml_local);
-                free(ml_server);
-                return 0;
-            }
-            parse_manifest_line(ml_server, server_line);
+            // check if server has seen this file before
+            if (server_line){
+                parse_manifest_line(ml_server, server_line);
 
-            // sanity check this filename
-            if (strcmp(ml_server->hexdigest, ml_local->hexdigest) && ml_server->version >= ml_local->version){
-                puts("Client must sync with repository before commiting changes!");
-                close(commit_fd);
-                clean_file_buf(info);
-                clean_manifest_line(ml_local);
-                clean_manifest_line(ml_server);
+                // sanity check this filename
+                if (strcmp(ml_server->hexdigest, ml_local->hexdigest) && ml_server->version >= ml_local->version){
+                    puts("Client must sync with repository before commiting changes!");
+                    close(commit_fd);
+                    clean_file_buf(info);
+                    clean_manifest_line(ml_local);
+                    clean_manifest_line(ml_server);
+                    free(server_line);
+                    free(ml_local);
+                    free(ml_server);
+                    return 0;
+                }
                 free(server_line);
-                free(ml_local);
-                free(ml_server);
-                return 0;
+                clean_manifest_line(ml_server);
             }
-            free(server_line);
         }
 
         // check local manifest line for special code
-        if (!strcmp(ml_local->code, "M") || !strcmp(ml_local->code, "R") || !strcmp(ml_local->code, "A")){
+        if (!strcmp(ml_local->code, "M") || !strcmp(ml_local->code, "D") || !strcmp(ml_local->code, "A")){
 
-                // if modify, create new hash and version number
-                char *newline;
-                if (!strcmp(ml_local->code, "M")){
-                    char new_digest[32+1];
-                    md5sum(ml_local->fname, new_digest);
+            // if modify, create new hash and version number
+            char *newline;
+            if (!strcmp(ml_local->code, "M")){
+                char new_digest[32+1];
+                md5sum(ml_local->fname, new_digest);
 
-                    char *new_version = malloc(50);
-                    sprintf(new_version, "%d", atoi(ml_local->version) + 1);
+                char *new_version = malloc(50);
+                sprintf(new_version, "%d", atoi(ml_local->version) + 1);
 
-                    newline = create_manifest_line(ml_local->code, new_digest, new_version, ml_local->fname);
-                    free(new_version);
-                } else {
-                    newline = create_manifest_line(ml_local->code, ml_local->hexdigest, ml_local->version, ml_local->fname);
-                }
+                newline = generate_manifest_line(ml_local->code, new_digest, new_version, ml_local->fname);
+                free(new_version);
+            } else {
+                newline = generate_manifest_line(ml_local->code, ml_local->hexdigest, ml_local->version, ml_local->fname);
+            }
 
-                // write to .Commit file
-                write(commit_fd, newline, strlen(newline));
-                free(newline);
+            // write to .Commit file
+            write(commit_fd, newline, strlen(newline));
+            free(newline);
 
-                // output to stdout
-                printf("%s %s\n", ml_local->code, ml_local->fname);
+            // output to stdout
+            printf("%s %s\n", ml_local->code, ml_local->fname);
         }
 
-        clean_manifest_line(ml_server);
         clean_manifest_line(ml_local);
     }
 

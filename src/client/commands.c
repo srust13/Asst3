@@ -66,7 +66,7 @@ void upgrade(char *project){
 void commit(char *project){
 
     // check if client already has non-empty .Update file
-    char *update = malloc(strlen(project) + strlen(".Update") + 1);
+    char *update = malloc(strlen(project) + 1 + strlen(".Update") + 1);
     sprintf(update, "%s/.Update", project);
     struct stat st = {0};
     if (stat(update, &st) && st.st_size > 0){
@@ -101,13 +101,13 @@ void commit(char *project){
     clean_file_buf(info);
 
     // retrieve client .Manifest and parse version
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 1);
+    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
     info = calloc(1, sizeof(file_buf_t));
     init_file_buf(info, manifest);
     read_file_until(info, ' ');
     int client_manifest_version = atoi(info->data);
     clean_file_buf(info);
-    free(info);
 
     // verify .Manifest versions are equal
     if (server_manifest_version != client_manifest_version){
@@ -122,7 +122,8 @@ void commit(char *project){
     }
 
     // create .Commit file
-    char *commit = malloc(strlen(project) + strlen(".Commit") + 1);
+    char *commit = malloc(strlen(project) + 1 + strlen(".Commit") + 1);
+    sprintf(commit, "%s/.Commit", project);
     if (!generate_commit_file(commit, manifest, tempfile)){
         send_int(sock, 0);
         remove(commit);

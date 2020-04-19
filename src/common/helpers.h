@@ -47,7 +47,7 @@ char *set_create_project(int sock, int should_create);
 void gen_temp_filename(char *tempfile);
 
 char *search_file_in_manifest(char *manifest, char *search);
-char *create_manifest_line(char *code, char *hexdigest, char *version, char *fname);
+char *generate_manifest_line(char *code, char *hexdigest, char *version, char *fname);
 void parse_manifest_line(manifest_line_t *ml, char *line);
 void clean_manifest_line(manifest_line_t *ml);
 int generate_commit_file(char *commit, char *client_manifest, char *server_manifest);

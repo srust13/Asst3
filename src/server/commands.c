@@ -30,6 +30,7 @@ void commit(int sock){
 
     // send manifest
     char *manifest = malloc(strlen(project) + strlen(".Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
     send_file(manifest, sock, 0);
     free(manifest);
 
@@ -42,6 +43,7 @@ void commit(int sock){
 
     // receive client .Commit file
     recv_file(sock, NULL);
+    puts("Received new .Commit file");
     free(project);
 }
 
