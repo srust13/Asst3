@@ -265,7 +265,8 @@ void read_file_until(file_buf_t *info, char delim){
  * https://stackoverflow.com/a/9210960/5183816
  */
 void mkpath(char* file_path) {
-    for (char* p = strchr(file_path + 1, '/'); p; p = strchr(p + 1, '/')) {
+    char *p;
+    for (p = strchr(file_path + 1, '/'); p; p = strchr(p + 1, '/')) {
         *p = '\0';
         if (mkdir(file_path, 0755) == -1) {
             if (errno != EEXIST) {
@@ -285,8 +286,7 @@ void send_file(char *filename, int sock, int send_filename){
     // send filename if we should
     send_int(sock, send_filename);
     if (send_filename){
-        write(sock, filename, strlen(filename));
-        write(sock, "\n", 1);
+        send_line(sock, filename);
     }
 
     // send file size
