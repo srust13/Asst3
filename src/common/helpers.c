@@ -485,7 +485,7 @@ void add_to_manifest(char *project, char *filename){
     char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
     sprintf(manifest, "%s/.Manifest", project);
     init_file_buf(info, manifest);
-
+    
     // open tempfile
     char tempfile[15+1];
     gen_temp_filename(tempfile);
@@ -540,8 +540,12 @@ void add_to_manifest(char *project, char *filename){
 
     // cleanup
     close(fout);
-    rename(tempfile, manifest);
+    //rename(tempfile, manifest);
+    char *mv_cmd = malloc(strlen("mv ") + strlen(tempfile) + strlen(" ") + strlen(manifest) + 1);
+    sprintf(mv_cmd, "mv %s %s", tempfile, manifest);
+    system(mv_cmd);
     free(manifest);
+    free(mv_cmd);
     clean_file_buf(info);
     remove(tempfile);
 }
@@ -601,8 +605,13 @@ void remove_from_manifest(char *project, char *filename){
 
     // cleanup
     close(fout);
-    rename(tempfile, manifest);
+    //rename(tempfile, manifest);
+    char *mv_cmd = malloc(strlen("mv ") + strlen(tempfile) + strlen(" ") + strlen(manifest) + 1);
+    sprintf(mv_cmd, "mv %s %s", tempfile, manifest);
+    system(mv_cmd);
+    
     free(manifest);
+    free(mv_cmd);
     clean_file_buf(info);
     remove(tempfile);
 
