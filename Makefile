@@ -53,7 +53,15 @@ currentversion: add_remove
 	@(./tests/scripts/currentversion.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
 
-run: currentversion
+checkout: currentversion
+	@(./tests/scripts/checkout.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+
+destroy: checkout
+	@(./tests/scripts/destroy.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+
+run: destroy
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure
