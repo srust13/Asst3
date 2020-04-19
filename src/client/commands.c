@@ -47,7 +47,7 @@ void checkout(char *project){
         exit(EXIT_FAILURE);
     }
 
-    recv_directory(&sock, project);
+    recv_directory(sock, project);
     close(sock);
 }
 

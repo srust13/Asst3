@@ -10,7 +10,6 @@
 #include <sys/stat.h>
 #include <openssl/md5.h>
 #include <sys/types.h>
-#include <dirent.h>
 
 #include "helpers.h"
 
@@ -354,7 +353,7 @@ void send_directory(char *dirname, int sock){
     // send tar file to client
     char *dir_tar_name = malloc(strlen(dirname) + strlen(".tar.gz") + 1);
     sprintf(dir_tar_name, "%s.tar.gz", dirname);
-    send_file(dir_tar_name, sock);
+    send_file(dir_tar_name, sock, 0);
 
     // clean up (remove tar file)    
     remove(dir_tar_name);
@@ -371,7 +370,7 @@ void recv_directory(int sock, char *dirname){
     char *dir_tar_name = malloc(strlen(dirname) + strlen(".tar.gz") + 1);
     sprintf(dir_tar_name, "%s.tar.gz", dirname);
 
-    recv_file(sock, tar_dirname);
+    recv_file(sock, dir_tar_name);
 
     // untar it
     char *untar_cmd = malloc(strlen("tar -xf ") + strlen(dir_tar_name) + 1);
