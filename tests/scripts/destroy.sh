@@ -13,14 +13,10 @@ cd ../client
 ../../bin/WTF destroy trainReservation
 
 # test destroy error cases
-../../bin/WTF destroy nonexistentProj
+../../bin/WTF destroy nonexistentProj && exit 1
 
 # kill server
-kill -INT $pid &2>/dev/null
+kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
-if [ -d ../server/trainReservation ] ; then
-exit 1
-else 
-exit 0
-fi
+[ ! -d ../server/trainReservation ]
