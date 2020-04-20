@@ -729,6 +729,12 @@ void remove_from_manifest(char *project, char *filename){
         parse_manifest_line(ml, info->data);
         if (!strcmp(filename, ml->fname)){
             found_file = 1;
+            if (!strcmp(ml->code, "A")){
+                // this file was newly added anyway, so no point
+                // to adding it to Manifest file
+                clean_manifest_line(ml);
+                continue;
+            }
             char *out_buf = generate_manifest_line("D", ml->hexdigest, ml->version, ml->fname);
             write(fout, out_buf, strlen(out_buf));
             free(out_buf);

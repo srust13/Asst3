@@ -17,7 +17,6 @@ expected='Server connected
 Version | Filename
 ----------------------------------------------
 0 huffman_dir/file1
-0 huffman_dir/file2
 0 huffman_dir/file3
 
 Client gracefully disconnected from server
