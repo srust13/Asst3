@@ -24,9 +24,10 @@ Client gracefully disconnected from server
 Command completed successfully'
 
 # kill server
-kill -INT $pid &2>/dev/null
+kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
+# cleanup
 rm .configure
 
 # return diff

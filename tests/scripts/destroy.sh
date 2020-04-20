@@ -1,33 +1,22 @@
 #!/bin/bash
 
-# start server from client since client's
-# manifest is more interesting
-cd tests_out/client
+# start server
+cd tests_out/server
 ../../bin/WTFserver 5000 &
 pid=$!
 
 # start client
-cd ../server
+cd ../client
 ../../bin/WTF configure localhost 5000
 
-result="$(../../bin/WTF currentversion huffman_dir)"
-expected='Server connected
+# test destroy
+../../bin/WTF destroy trainReservation
 
-----------------------------------------------
-Version | Filename
-----------------------------------------------
-0 huffman_dir/file1
-0 huffman_dir/file2
-0 huffman_dir/file3
-
-Client gracefully disconnected from server
-Command completed successfully'
+# test destroy error cases
+../../bin/WTF destroy nonexistentProj && exit 1
 
 # kill server
-kill -INT $pid &2>/dev/null
+kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
-rm .configure
-
-# return diff
-[[ "$result" == "$expected" ]]
+[ ! -d ../server/trainReservation ]

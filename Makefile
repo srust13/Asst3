@@ -34,34 +34,37 @@ bin/WTFserver: build/WTFserver.o build/server_commands.o build/helpers.o
 
 all: bin/WTFserver bin/WTF
 
-# runners
+# tests
 
-create: MANIFEST=tests_out/client/huffman_dir/.Manifest
 create: all
-	@./tests/scripts/create.sh 1>/dev/null
-	@echo "c71b94505304dbad1526882c36fae444 ${MANIFEST}" | md5sum -c --quiet - && \
-	 ( diff -qr tests_out/client/huffman_dir tests_out/server/huffman_dir && \
-	 echo ${GREEN}PASS${NC} ) || echo ${RED}FAIL${NC}
+	@(./tests/scripts/create.sh 1>/dev/null && \
+	 echo ${GREEN}PASS${NC} create ) || echo ${RED}FAIL${NC} create
 
-add_remove: MANIFEST=tests_out/client/huffman_dir/.Manifest
 add_remove: create
-	@./tests/scripts/add_remove.sh 1>/dev/null
-	@(echo "858621d44fc652f7c4ee6a174981a2e1 ${MANIFEST}" | md5sum -c --quiet -  && \
-	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+	@(./tests/scripts/add_remove.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC} add_remove ) || echo ${RED}FAIL${NC} add_remove
 
 currentversion: add_remove
 	@(./tests/scripts/currentversion.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+	echo ${GREEN}PASS${NC} currentversion) || echo ${RED}FAIL${NC} currentversion
 
-commit: currentversion
+checkout: add_remove
+	@(./tests/scripts/checkout.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC} checkout) || echo ${RED}FAIL${NC} checkout
+
+destroy: checkout
+	@(./tests/scripts/destroy.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC} destroy) || echo ${RED}FAIL${NC} destroy
+
+commit: add_remove
 	@(./tests/scripts/commit.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+	echo ${GREEN}PASS${NC} commit) || echo ${RED}FAIL${NC} commit
 
 push: commit
 	@(./tests/scripts/push.sh && \
-	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+	echo ${GREEN}PASS${NC} push) || echo ${RED}FAIL${NC} push
 
-run: commit
+run: currentversion destroy commit
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure

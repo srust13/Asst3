@@ -14,4 +14,9 @@ cd ../client
 kill -INT $pid &2>/dev/null
 wait $pid 2>/dev/null
 
-diff -qr huffman_dir/.Commit ../server/huffman_dir/.Commit
+result="$(cat huffman_dir/.Commit)"
+expected='A C84F8A070A28B21C1D84F6DDED7EB103 0 huffman_dir/file1
+D 6DAD2BC7378B4B6DC929B2ECCD9DF5C8 0 huffman_dir/file2
+M 1F2252AC5146C4C0EECE85C4617C5D4F 1 huffman_dir/file3'
+
+diff -qr huffman_dir/.Commit ../server/huffman_dir/.Commit && [[ "$expected" == "$result" ]]
