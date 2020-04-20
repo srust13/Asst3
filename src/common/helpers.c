@@ -1007,7 +1007,6 @@ void regenerate_manifest(char *client_manifest){
     // 1. Make the code = "-"
     // 2. If "D", omit the line
     // 3. If "M", recompute the hash
-    // 4. Increment file version number
     while (1){
         read_file_until(info, '\n');
         if (info->file_eof)
@@ -1022,11 +1021,8 @@ void regenerate_manifest(char *client_manifest){
                 md5sum(ml->fname, ml->hexdigest);
             }
 
-            // update version
-            sprintf(newVersion_buf, "%d", atoi(ml->version) + 1);
-
             // write new line to tempfile
-            char *newline = generate_manifest_line("-", ml->hexdigest, newVersion_buf, ml->fname);
+            char *newline = generate_manifest_line("-", ml->hexdigest, ml->version, ml->fname);
             write(fout, newline, strlen(newline));
             free(newline);
         }
