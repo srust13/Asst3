@@ -1028,7 +1028,6 @@ void regenerate_manifest(char *client_manifest){
             // write new line to tempfile
             char *newline = generate_manifest_line("-", ml->hexdigest, newVersion_buf, ml->fname);
             write(fout, newline, strlen(newline));
-            write(fout, "\n", 1);
             free(newline);
         }
         clean_manifest_line(ml);

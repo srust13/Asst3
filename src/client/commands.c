@@ -159,7 +159,7 @@ void push(char *project){
     }
 
     // check if client has a .Commit file
-    if (file_exists_local(project, ".Commit")){
+    if (!file_exists_local(project, ".Commit")){
         puts("Project has no .Commit to push!");
         exit(EXIT_FAILURE);
     }

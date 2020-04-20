@@ -75,6 +75,9 @@ void push(int sock){
     gen_temp_filename(temp_tar);
     recv_file(sock, temp_tar);
 
+    remove(temp_tar); // TODO: Remove these 2 lines
+    return;
+
     // untar files into project
     char *untar_cmd = malloc(strlen("tar xzf ") + strlen(temp_tar) + 1);
     sprintf(untar_cmd, "tar xzf %s", temp_tar);
