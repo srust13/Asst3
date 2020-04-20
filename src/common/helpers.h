@@ -5,6 +5,13 @@
 
 void seed_rand();
 
+typedef struct project_t {
+    pthread_mutex_t lock;
+    int sock;
+    char *name;
+    struct project_t *next;
+} project_t;
+
 typedef struct file_buf_t {
     char *data;
     char *remaining;
@@ -12,10 +19,8 @@ typedef struct file_buf_t {
     int data_buf_size;
     int remaining_size;
 
-    int sock;
     int fd;
     int file_eof;
-    pthread_t thread_id;
 } file_buf_t;
 
 typedef struct manifest_line_t {
