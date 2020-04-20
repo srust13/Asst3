@@ -53,7 +53,15 @@ currentversion: add_remove
 	@(./tests/scripts/currentversion.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
 
-run: currentversion
+commit: currentversion
+	@(./tests/scripts/commit.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+
+push: commit
+	@(./tests/scripts/push.sh && \
+	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+
+run: commit
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure

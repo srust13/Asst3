@@ -447,6 +447,58 @@ void md5sum(char *filename, char *hexstring){
 }
 
 /**
+ * Generates a tar file with files that have the code "A" or "M"
+ * Return: name of tar file
+ */
+char* generate_added_modified_files_tar(char *commitPath) {
+    // generate temp name for tar file
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    
+    // create empty tar file
+    char *emptyTar_cmd = malloc(strlen("tar -cf ./") + strlen(tempfile) + strlen(".tar.gz -T /dev/null") + 1);
+    sprintf(emptyTar_cmd, "tar -cf ./%s.tar.gz -T /dev/null", tempfile);
+    system(emptyTar_cmd);
+    
+    // go through Commit file and if a file has code "A" or "M", add it to tar file
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, commitPath);
+    int addFile;    
+
+    while (1){
+        addFile = 0;
+        read_file_until(info, ' '); 
+        
+        // if the file has been added or modified, we want to add the file to the tar
+        if (!strcmp(info -> data, "A") || !strcmp(info -> data, "M")){
+            addFile = 1;
+        } 
+        read_file_until(info, '\n');   
+        
+        if (addFile){
+            char *addFile_cmd = malloc(strlen("tar rvf ./") + strlen(tempfile) + strlen(".tar.gz") + strlen(info -> data) + 1);
+            sprintf(addFile_cmd, "tar rvf ./%s.tar.gz %s", tempfile, info -> data);
+            system(addFile_cmd);
+            free(addFile_cmd);
+        }
+        
+        if (info->file_eof)
+            break;
+    }
+
+    free(info->remaining);
+    free(info->data);
+    if (info->fd) close(info->fd);
+    if (info->sock) close(info->sock);
+    free(info);
+
+    // return the tar name
+    char *tar_name = malloc(strlen(tempfile) + strlen(".tar.gz") + 1);
+    sprintf(tar_name, "%s.tar.gz", tempfile);
+    return tar_name;
+}
+
+/**
  * Seed rand with information from pid and clock/time.
  * https://stackoverflow.com/a/323302/5183816
  */
@@ -905,5 +957,80 @@ int generate_commit_file(char *commit, char *client_manifest, char *server_manif
     clean_file_buf(info);
     free(ml_local);
     free(ml_server);
+    return 1;
+}
+
+/**
+ * After pushing, recreate the Manifest file with <code> = "-" on client to files 
+ * that have been added or modified
+ *
+ * The line is added in the form:
+ * <code> <md5_hexdigest> <version> <filename><\n>
+ */
+
+int regenerate_manifest(char *client_manifest){
+
+    // read from client manifest
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, client_manifest);
+
+    // open tempfile to write new manifest to
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    // get the version number of the file and write to temp file the incremented version number
+    read_file_until(info, ' ');
+    char *newVersion_buf = malloc(10);
+    sprintf(newVersion_buf, "%d", atoi(info->data) + 1);    
+    write(fout, newVersion_buf, strlen(newVersion_buf));
+    free(newVersion_buf);
+
+    // write the project name
+    read_file_until(info, '\n');
+    write(fout, info -> data, strlen(info -> data));
+    write(fout, "\n", 1);
+
+    // create struct to go through manifest
+    manifest_line_t *ml = malloc(sizeof(manifest_line_t));
+
+    // for each line in manifest:
+    // 1. Make the code = "-"
+    // 2. write line to temp manifest file, updating the hash
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+
+        // get line
+        parse_manifest_line(ml, info->data);
+
+        // check manifest line for a modified file or an added file
+        if (!strcmp(ml_local->code, "M") || !strcmp(ml_local->code, "A")){
+
+            // if there was a special code, make new code = "-" and new hash
+            char *newline;            
+            char hex[32+1];
+            md5sum(ml_local->fname, hex);
+
+            newline = generate_manifest_line("-", hex, ml->version, ml->fname);
+
+            // write to tempfile
+            write(fout, newline, strlen(newline));
+            free(newline);
+        }
+        clean_manifest_line(ml);
+    }
+
+    close(commit_fd);
+    clean_file_buf(info);
+    free(ml);
+
+    char *move_cmd = malloc(strlen("mv ") + strlen(tempfile) + strlen(" ") + strlen(client_manifest) + 1);
+    sprintf(move_cmd, "mv %s %s", tempfile, client_manifest);
+    system(move_cmd);
+
+    remove(tempfile);
+    free(tempfile);
     return 1;
 }
