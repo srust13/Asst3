@@ -64,7 +64,7 @@ push: commit
 	@(./tests/scripts/push.sh && \
 	echo ${GREEN}PASS${NC} push) || echo ${RED}FAIL${NC} push
 
-run: currentversion destroy commit
+run: commit
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure

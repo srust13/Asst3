@@ -1045,3 +1045,16 @@ void regenerate_manifest(char *client_manifest){
     remove(tempfile);
     free(move_cmd);
 }
+
+/**********************************************************************************
+                                  COMMIT HELPERS
+***********************************************************************************/
+
+/**
+ * For every .Commit file in the project dir, compute the hash of it 
+ * If it's equal to the one we're receving, return 1
+ */
+void commit_exists(char *project){
+
+}
+

@@ -60,6 +60,18 @@ void push(int sock){
     // TODO: check if any client commit for this project exists and matches the received one
     int matches = 1;
 
+
+
+    // for every .Commit file, get the name of a .Commit file and md5sum it. If it's equal to the one we're receving, return 1
+
+
+
+
+
+
+
+
+
     // if received commit has expired; inform client and close connection
     if (!matches){
         send_int(sock, 0);
