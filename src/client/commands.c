@@ -64,10 +64,88 @@ void upgrade(char *project){
 }
 
 void commit(char *project){
-    puts("Commit");
-    printf("Project: %s\n", project);
 
+    // check if client already has non-empty .Update file
+    char *update = malloc(strlen(project) + 1 + strlen(".Update") + 1);
+    sprintf(update, "%s/.Update", project);
+    struct stat st = {0};
+    if (stat(update, &st) && st.st_size > 0){
+        puts("Project already has a .Update file!");
+        exit(EXIT_FAILURE);
+    }
+
+    // check if client already has a .Conflict file
+    if (file_exists_local(project, ".Conflict")){
+        puts("Project has a .Conflict that must be resolved first!");
+        exit(EXIT_FAILURE);
+    }
+
+    // connect to server and make sure project exists
     init_socket_server(&sock, "commit");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        free(update);
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // retrieve server .Manifest and parse version
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    recv_file(sock, tempfile);
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, tempfile);
+    read_file_until(info, ' ');
+    int server_manifest_version = atoi(info->data);
+    clean_file_buf(info);
+
+    // retrieve client .Manifest and parse version
+    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
+    info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+    read_file_until(info, ' ');
+    int client_manifest_version = atoi(info->data);
+    clean_file_buf(info);
+
+    // verify .Manifest versions are equal
+    if (server_manifest_version != client_manifest_version){
+        puts("Client and server .Manifest versions don't match!");
+        puts("You need to update to the latest server code first.");
+        send_int(sock, 0);
+        free(update);
+        free(manifest);
+        remove(tempfile);
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // create .Commit file
+    char *commit = malloc(strlen(project) + 1 + strlen(".Commit") + 1);
+    sprintf(commit, "%s/.Commit", project);
+    if (!generate_commit_file(commit, manifest, tempfile)){
+        send_int(sock, 0);
+        remove(commit);
+        close(sock);
+        free(update);
+        free(manifest);
+        free(commit);
+        remove(tempfile);
+        exit(EXIT_FAILURE);
+    }
+
+    // send success
+    send_int(sock, 1);
+
+    // send commit file to server
+    send_file(commit, sock, 1);
+
+    // cleanup
+    free(update);
+    free(manifest);
+    free(commit);
+    remove(tempfile);
     close(sock);
 }
 

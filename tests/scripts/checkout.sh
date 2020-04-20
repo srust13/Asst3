@@ -2,13 +2,8 @@
 
 # create random project/files on the server
 cd tests_out/server
-mkdir trainReservation
-cd trainReservation
-mkdir part1
-mkdir part2
-cd part1
-mkdir part1_1
-cd ../..
+mkdir -p trainReservation/part1/part1_1
+mkdir -p trainReservation/part2
 echo "aaaaaaaa" > trainReservation/file1
 echo "bbbbbbbb" > trainReservation/file2
 echo "cccccccc" > trainReservation/file3
@@ -30,11 +25,11 @@ cd ../client
 ../../bin/WTF checkout trainReservation
 
 # test checkout error cases
-../../bin/WTF checkout nonexistentProj
+../../bin/WTF checkout nonexistentProj && exit 1
 ../../bin/WTF checkout trainReservation
 
 # kill server
-kill -INT $pid &2>/dev/null
+kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
 diff -qr trainReservation ../server/trainReservation

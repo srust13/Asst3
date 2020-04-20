@@ -24,7 +24,27 @@ void upgrade(int sock){
 }
 
 void commit(int sock){
-    puts("Commit");
+    char *project = set_create_project(sock, 0);
+    if (!project)
+        return;
+
+    // send manifest
+    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
+    send_file(manifest, sock, 0);
+    free(manifest);
+
+    // receive client success msg on creating .Commit
+    if (!recv_int(sock)){
+        puts("Client encountered error when trying to .Commit");
+        free(project);
+        return;
+    }
+
+    // receive client .Commit file
+    recv_file(sock, NULL);
+    puts("Received new .Commit file");
+    free(project);
 }
 
 void push(int sock){

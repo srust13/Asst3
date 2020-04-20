@@ -34,26 +34,21 @@ bin/WTFserver: build/WTFserver.o build/server_commands.o build/helpers.o
 
 all: bin/WTFserver bin/WTF
 
-# runners
+# tests
 
-create: MANIFEST=tests_out/client/huffman_dir/.Manifest
 create: all
-	@./tests/scripts/create.sh 1>/dev/null
-	@echo "c71b94505304dbad1526882c36fae444 ${MANIFEST}" | md5sum -c --quiet - && \
-	 ( diff -qr tests_out/client/huffman_dir tests_out/server/huffman_dir && \
+	@(./tests/scripts/create.sh 1>/dev/null && \
 	 echo ${GREEN}PASS${NC} ) || echo ${RED}FAIL${NC}
 
-add_remove: MANIFEST=tests_out/client/huffman_dir/.Manifest
 add_remove: create
-	@./tests/scripts/add_remove.sh 1>/dev/null
-	@(echo "d3675e5d7625293a788597c22910c29c ${MANIFEST}" | md5sum -c --quiet -  && \
+	@(./tests/scripts/add_remove.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
 
 currentversion: add_remove
 	@(./tests/scripts/currentversion.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
 
-checkout: currentversion
+checkout: add_remove
 	@(./tests/scripts/checkout.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
 
