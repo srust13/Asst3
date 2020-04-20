@@ -171,7 +171,7 @@ int main(int argc, char *argv[]){
     puts("Server started! Waiting for connections...");
     while(1){
         int client_fd = accept(server_fd, (struct sockaddr *) &client, &c);
-        int thread_id;
+        pthread_t thread_id;
         puts("Client connected");
 
         // if you want to debug a single threaded app,
@@ -180,7 +180,7 @@ int main(int argc, char *argv[]){
 
         handle_connection((void *) &client_fd);
 
-        // if(pthread_create(&thread_id), NULL,
+        // if(pthread_create(&thread_id, NULL,
         //                   handle_connection, (void *) &client_fd) < 0){
         //     puts("Couldn't create thread");
         //     exit(EXIT_FAILURE);
