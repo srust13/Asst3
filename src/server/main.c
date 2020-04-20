@@ -46,7 +46,6 @@ void sigint_handler(int s){
 }
 
 void perform_cmd(int sock){
-    seed_rand();
     // read command
     char *command = recv_line(sock);
 
@@ -87,6 +86,7 @@ void *handle_connection(void *conninfo_idx){
     file_buf_t *conn = &(conn_infos[conn_idx]);
 
     // handle request
+    seed_rand();
     perform_cmd(conn->sock);
 
     // cleanup

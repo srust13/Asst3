@@ -48,7 +48,45 @@ void commit(int sock){
 }
 
 void push(int sock){
-    puts("Push");
+    char *project = set_create_project(sock, 0);
+    if (!project)
+        return;
+
+    // receive client's .Commit
+    char temp_commit[15+1];
+    gen_temp_filename(temp_commit);
+    recv_file(sock, temp_commit);
+
+    // TODO: check if any client commit for this project exists and matches the received one
+    int matches = 1;
+
+    // if received commit has expired; inform client and close connection
+    if (!matches){
+        send_int(sock, 0);
+        remove(temp_commit);
+        return;
+    }
+    send_int(sock, 1);
+
+    // TODO: Expire other .Commit files for this project
+
+    // receive tar with changed files
+    char temp_tar[15+1];
+    gen_temp_filename(temp_tar);
+    recv_file(sock, temp_tar);
+
+    // untar files into project
+    char *untar_cmd = malloc(strlen("tar xzf ") + strlen(temp_tar) + 1);
+    sprintf(untar_cmd, "tar xzf %s", temp_tar);
+    system(untar_cmd);
+    free(untar_cmd);
+
+    // TODO: regenerate manifest from .Commit, then expire the final commit
+
+    // cleanup
+    remove(temp_commit);
+    remove(temp_tar);
+    free(project);
 }
 
 void create(int sock){

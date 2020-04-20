@@ -149,16 +149,21 @@ void commit(char *project){
     close(sock);
 }
 
-// To do:
-// 1. deal with case: If there are other .Commit files pending, expire them so that push calls from other clients fail.
-// 2. check if remote .Commit file is same as local .Commit file 
-/* 
- * Push fails for the following reasons:
- *      - The .Commit does not exist on the server or the .Commits are not the same in which case, the user must call commit 
- *        again to sync the .Commit files.
-*/
 void push(char *project){
-    
+
+    // check if project exists locally
+    struct stat st = {0};
+    if (stat(project, &st) == -1){
+        puts("Project doesn't exists in local repository.");
+        exit(EXIT_FAILURE);
+    }
+
+    // check if client has a .Commit file
+    if (file_exists_local(project, ".Commit")){
+        puts("Project has no .Commit to push!");
+        exit(EXIT_FAILURE);
+    }
+
     // check if project exists on server
     init_socket_server(&sock, "push");
     if (!server_project_exists(sock, project)){
@@ -168,32 +173,31 @@ void push(char *project){
         exit(EXIT_FAILURE);
     }
 
-    // check if project exists locally
-    struct stat st = {0};
-    if (stat(project, &st) == -1){
-        puts("Project doesn't exists in local repository.");
-        exit(EXIT_FAILURE);
-    }
-
-    // send local .Commit file to server
+    // send local .Commit file to server and wait for acceptance
     char *commitPath = malloc(strlen(project) + strlen("/.Commit") + 1);
     sprintf(commitPath, "%s/.Commit", project);
-    send_file(commitPath, sock, 0);  
+    send_file(commitPath, sock, 0);
+    int success = recv_int(sock);
 
-    // generate a tar of all added/modified files in .Commit and send them to server
-    char *tar_name = generate_added_modified_files_tar(commitPath);
-    send_file(tar_name, sock, 0);    
-    remove(tar_name);
+    if (success){
+        // generate a tar of all A/M files in .Commit and send to server
+        char *tar_name = generate_am_tar(commitPath);
+        send_file(tar_name, sock, 0);
 
-    // create a new manifest only with files that have code "A" or "M" and change their codes to "-" and rehash
-    char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
-    sprintf(manifestPath, "%s/.Manifest", project);
-    regenerate_manifest(manifestPath);
+        // create a new manifest file. Files that have code "A" or "M",
+        // change their codes to "-" and rehash
+        char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
+        sprintf(manifestPath, "%s/.Manifest", project);
+        regenerate_manifest(manifestPath);
+
+        remove(tar_name);
+        free(tar_name);
+        free(manifestPath);
+    }
 
     // cleanup
-    remove(commitPath);  
+    remove(commitPath);
     free(commitPath);
-    free(manifestPath);
     close(sock);
 }
 
