@@ -25,7 +25,7 @@ typedef struct file_buf_t {
 
 typedef struct manifest_line_t {
     char *code;
-    char *version;
+    int  version;
     char *hexdigest;
     char *fname;
 } manifest_line_t;
@@ -52,7 +52,7 @@ void gen_temp_filename(char *tempfile);
 void add_to_manifest(char *project, char *filenames);
 void remove_from_manifest(char *project, char *filenames);
 char *search_file_in_manifest(char *manifest, char *search);
-char *generate_manifest_line(char *code, char *hexdigest, char *version, char *fname);
+char *generate_manifest_line(char *code, char *hexdigest, int version, char *fname);
 void parse_manifest_line(manifest_line_t *ml, char *line);
 void clean_manifest_line(manifest_line_t *ml);
 int generate_commit_file(char *commit, char *client_manifest, char *server_manifest);
