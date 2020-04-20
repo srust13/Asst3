@@ -38,6 +38,7 @@ void send_file(char *filename, int sock, int send_filename);
 void recv_file(int sock, char *dest);
 void send_directory(int sock, char *dirname);
 void recv_directory(int sock, char *dirname);
+char* generate_added_modified_files_tar(char *commitPath);
 void add_to_manifest(char *project, char *filenames);
 void remove_from_manifest(char *project, char *filenames);
 void assert_project_exists_local(char *project);
@@ -51,3 +52,4 @@ char *generate_manifest_line(char *code, char *hexdigest, char *version, char *f
 void parse_manifest_line(manifest_line_t *ml, char *line);
 void clean_manifest_line(manifest_line_t *ml);
 int generate_commit_file(char *commit, char *client_manifest, char *server_manifest);
+int regenerate_manifest(char *client_manifest);

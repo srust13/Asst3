@@ -188,7 +188,7 @@ void push(char *project){
     // create a new manifest only with files that have code "A" or "M" and change their codes to "-" and rehash
     char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
     sprintf(manifestPath, "%s/.Manifest", project);
-    regenerate_manifest(client_manifest);
+    regenerate_manifest(manifestPath);
 
     // cleanup
     remove(commitPath);  

@@ -1006,12 +1006,12 @@ int regenerate_manifest(char *client_manifest){
         parse_manifest_line(ml, info->data);
 
         // check manifest line for a modified file or an added file
-        if (!strcmp(ml_local->code, "M") || !strcmp(ml_local->code, "A")){
+        if (!strcmp(ml->code, "M") || !strcmp(ml->code, "A")){
 
             // if there was a special code, make new code = "-" and new hash
             char *newline;            
             char hex[32+1];
-            md5sum(ml_local->fname, hex);
+            md5sum(ml->fname, hex);
 
             newline = generate_manifest_line("-", hex, ml->version, ml->fname);
 
@@ -1022,7 +1022,7 @@ int regenerate_manifest(char *client_manifest){
         clean_manifest_line(ml);
     }
 
-    close(commit_fd);
+    close(fout);
     clean_file_buf(info);
     free(ml);
 
@@ -1031,6 +1031,5 @@ int regenerate_manifest(char *client_manifest){
     system(move_cmd);
 
     remove(tempfile);
-    free(tempfile);
     return 1;
 }
