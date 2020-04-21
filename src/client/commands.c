@@ -173,13 +173,12 @@ void push(char *project){
     // send local .Commit file md5sum to server and wait for acceptance
     char *commitPath = malloc(strlen(project) + strlen("/.Commit") + 1);
     sprintf(commitPath, "%s/.Commit", project);
-    
-    // send_file(commitPath, sock, 0); // TODO: delete this since we're going to be sending the md5sum
+
     char digest[32+1];
     md5sum(digest, commitPath);
     send_line(sock, digest);
 
-    int success = recv_int(sock);    
+    int success = recv_int(sock);
 
     if (success){
         // generate a tar of all A/M files in .Commit and send to server

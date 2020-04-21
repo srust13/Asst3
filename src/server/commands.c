@@ -34,31 +34,27 @@ void commit(int sock, char *project){
     }
 
     // receive client .Commit file
-    recv_file(sock, NULL);
+    char *commit_path = gen_commit_filename(project);
+    recv_file(sock, commit_path);
+    free(commit_path);
     puts("Received new .Commit file");
 }
 
-
-// Confused on why directions say to send .Commit file to server and then check if server has the .Commit file? 
-// Just send hash from client and check if the .Commit file is already on server from Commiting process?
 void push(int sock, char *project){
-    
-    // receive client's .Commit
-    char *commit_path = gen_commit_filename(project);
-    //recv_file(sock, commit_path); // TODO: Delete this since we're using md5sum
-    char *client_commit_hash = recv_line(sock);
 
-    // find out if a .Commit file md5sum in the current project matches .Commit md5sum recieved from client    
+    // find out if a .Commit file md5sum in the current project matches
+    // .Commit md5sum recieved from client
+    char *client_commit_hash = recv_line(sock);
     char *commitMatch = commit_exists(project, client_commit_hash);
 
     // if received commit has expired; inform client and close connection
-    if(!strcmp("\0", commitMatch)) {
+    if(!commitMatch) {
         send_int(sock, 0);
-        remove(commit_path);
+        free(client_commit_hash);
         return;
     }
-
     send_int(sock, 1);
+    free(client_commit_hash);
 
     // Expire all .Commit files for this project
     removeAllCommits(project);
@@ -66,25 +62,21 @@ void push(int sock, char *project){
     // receive tar with changed files
     char temp_tar[15+1];
     gen_temp_filename(temp_tar);
-    recv_file(sock, temp_tar);  // TODO: Should file extension be .tar to untar or unnecessary? 
+    recv_file(sock, temp_tar);
 
     // untar files into project directory
-    char *untar_cmd = malloc(strlen("tar xzf ") + strlen(temp_tar) + strlen(" -C /") + strlen(project) + 1);
-    sprintf(untar_cmd, "tar xzf %s -C /%s", temp_tar, project);
+    char *untar_cmd = malloc(strlen("tar xzf ") + strlen(temp_tar) + 1);
+    sprintf(untar_cmd, "tar xzf %s", temp_tar, project);
     system(untar_cmd);
     free(untar_cmd);
 
-    // remove current .Manifest  
+    // replace old .Manifest with new updated .Manifest from client
     char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
     sprintf(manifestPath, "%s/.Manifest", project);
-    remove(manifestPath);
-
-    // replace old .Manifest with new updated .Manifest from client
-    recv_file(sock, manifestPath);    
+    recv_file(sock, manifestPath);
+    free(manifestPath);
 
     // cleanup
-    free(commit_path);
-    free(manifestPath);
     remove(temp_tar);
 }
 

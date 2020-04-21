@@ -1154,15 +1154,15 @@ void regenerate_manifest(char *client_manifest, char *commit){
 ***********************************************************************************/
 
 /**
- * For every .Commit file in the project dir, compute the hash of it 
+ * For every .Commit file in the project dir, compute the hash of it
  * If it's equal to the client commit hash, return name of that file
  * If the commit file wasn't found, return null byte
  */
-char* commit_exists(char *project, char *client_hex){
+char *commit_exists(char *project, char *client_hex){
 
-    // open the project directory 
-    struct dirent *de;  
-    DIR *proj_dir = opendir(project);   
+    // open the project directory
+    struct dirent *de;
+    DIR *proj_dir = opendir(project);
     char *commitBuff = calloc(8, sizeof(char));
 
     // go through the files of the project directory
@@ -1174,36 +1174,39 @@ char* commit_exists(char *project, char *client_hex){
                 commitBuff[i] = (de->d_name)[i];
             }
 
-            // if the file name starts with .Commit, check its hash is the same as client .Commit
+            // if the file name starts with .Commit,
+            // check that its hash is the same as client .Commit
             if (!strcmp(commitBuff, ".Commit")) {
                 char hexstring[33];
                 md5sum(de->d_name, hexstring);
 
                 // if hash is same, return file name
-                if (strcmp(hexstring, client_hex)) {
+                if (!strcmp(hexstring, client_hex)) {
+                    free(commitBuff);
+                    closedir(proj_dir);
                     return de->d_name;
-                }                
+                }
             }
         }
-    }   
-    closedir(proj_dir);   
-    free(commitBuff);  
-    return "\0";
+    }
+    closedir(proj_dir);
+    free(commitBuff);
+    return NULL;
 }
 
 /**
  * Remove all .Commit files from given project
  */
-void removeAllCommits(char *project) {
+void remove_all_commits(char *project) {
 
-    // open the project directory 
-    struct dirent *de;  
-    DIR *proj_dir = opendir(project);   
+    // open the project directory
+    struct dirent *de;
+    DIR *proj_dir = opendir(project);
     char *commitBuff = calloc(8, sizeof(char));
     int commitFile_length = 18;
 
     char *rm_commit_path = malloc(strlen(project) + strlen("/") + commitFile_length + 1);
-    
+
     // go through the files of the project directory
     while ((de = readdir(proj_dir)) != NULL) {
         // only read files with names longer than ".Commit" length
@@ -1213,15 +1216,14 @@ void removeAllCommits(char *project) {
                 commitBuff[i] = (de->d_name)[i];
             }
 
-            // delete all .Commit files 
+            // delete all .Commit files
             if (!strcmp(commitBuff, ".Commit")) {
                 sprintf(rm_commit_path, "%s/%s", project, de->d_name);
                 remove(rm_commit_path);
             }
         }
-    }   
-    closedir(proj_dir);   
-    free(commitBuff); 
-    free(rm_commit_path); 
-    return;
+    }
+    closedir(proj_dir);
+    free(commitBuff);
+    free(rm_commit_path);
 }
