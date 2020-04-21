@@ -5,6 +5,13 @@
 
 void seed_rand();
 
+typedef struct project_t {
+    pthread_mutex_t lock;
+    int sock;
+    char *name;
+    struct project_t *next;
+} project_t;
+
 typedef struct file_buf_t {
     char *data;
     char *remaining;
@@ -12,17 +19,17 @@ typedef struct file_buf_t {
     int data_buf_size;
     int remaining_size;
 
-    int sock;
     int fd;
     int file_eof;
-    pthread_t thread_id;
 } file_buf_t;
 
 typedef struct manifest_line_t {
-    char *code;
-    char *version;
-    char *hexdigest;
+    char code;
+    int  version;
+    char hexdigest[32+1];
     char *fname;
+
+    struct manifest_line_t *next;
 } manifest_line_t;
 
 int file_exists_local(char *project, char *fname);
@@ -38,16 +45,24 @@ void send_file(char *filename, int sock, int send_filename);
 void recv_file(int sock, char *dest);
 void send_directory(int sock, char *dirname);
 void recv_directory(int sock, char *dirname);
-void add_to_manifest(char *project, char *filenames);
-void remove_from_manifest(char *project, char *filenames);
+void md5sum(char *filename, char *hexstring);
 void assert_project_exists_local(char *project);
 void init_socket_server(int *sock, char *command);
 int server_project_exists(int sock, char *project);
 char *set_create_project(int sock, int should_create);
 void gen_temp_filename(char *tempfile);
 
+void add_to_manifest(char *project, char *filenames);
+void remove_from_manifest(char *project, char *filenames);
 char *search_file_in_manifest(char *manifest, char *search);
-char *generate_manifest_line(char *code, char *hexdigest, char *version, char *fname);
-void parse_manifest_line(manifest_line_t *ml, char *line);
+char *generate_manifest_line(char code, char *hexdigest, int version, char *fname);
+manifest_line_t *parse_manifest_line(char *line);
 void clean_manifest_line(manifest_line_t *ml);
 int generate_commit_file(char *commit, char *client_manifest, char *server_manifest);
+char* generate_am_tar(char *commitPath);
+void regenerate_manifest(char *client_manifest, char *commit);
+
+char* gen_commit_filename(char *project);
+void remove_all_commits(char *project);
+void removeAll_dFiles(char *commit);
+char *commit_exists(char *project, char *client_hex);

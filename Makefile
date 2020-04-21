@@ -38,25 +38,33 @@ all: bin/WTFserver bin/WTF
 
 create: all
 	@(./tests/scripts/create.sh 1>/dev/null && \
-	 echo ${GREEN}PASS${NC} ) || echo ${RED}FAIL${NC}
+	 echo ${GREEN}PASS${NC} create ) || echo ${RED}FAIL${NC} create
 
 add_remove: create
 	@(./tests/scripts/add_remove.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+	echo ${GREEN}PASS${NC} add_remove ) || echo ${RED}FAIL${NC} add_remove
 
 currentversion: add_remove
 	@(./tests/scripts/currentversion.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+	echo ${GREEN}PASS${NC} currentversion) || echo ${RED}FAIL${NC} currentversion
 
 checkout: add_remove
 	@(./tests/scripts/checkout.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+	echo ${GREEN}PASS${NC} checkout) || echo ${RED}FAIL${NC} checkout
 
 destroy: checkout
 	@(./tests/scripts/destroy.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC}) || echo ${RED}FAIL${NC}
+	echo ${GREEN}PASS${NC} destroy) || echo ${RED}FAIL${NC} destroy
 
-run: destroy
+commit: add_remove
+	@(./tests/scripts/commit.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC} commit) || echo ${RED}FAIL${NC} commit
+
+push: commit
+	@(./tests/scripts/push.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC} push) || echo ${RED}FAIL${NC} push
+
+run: currentversion destroy push
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure

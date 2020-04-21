@@ -73,6 +73,7 @@ void commit(char *project){
         puts("Project already has a .Update file!");
         exit(EXIT_FAILURE);
     }
+    free(update);
 
     // check if client already has a .Conflict file
     if (file_exists_local(project, ".Conflict")){
@@ -85,7 +86,6 @@ void commit(char *project){
     if (!server_project_exists(sock, project)){
         puts("Project doesn't exist on server!");
         puts("Client disconnecting.");
-        free(update);
         close(sock);
         exit(EXIT_FAILURE);
     }
@@ -114,7 +114,6 @@ void commit(char *project){
         puts("Client and server .Manifest versions don't match!");
         puts("You need to update to the latest server code first.");
         send_int(sock, 0);
-        free(update);
         free(manifest);
         remove(tempfile);
         close(sock);
@@ -128,7 +127,6 @@ void commit(char *project){
         send_int(sock, 0);
         remove(commit);
         close(sock);
-        free(update);
         free(manifest);
         free(commit);
         remove(tempfile);
@@ -142,7 +140,6 @@ void commit(char *project){
     send_file(commit, sock, 1);
 
     // cleanup
-    free(update);
     free(manifest);
     free(commit);
     remove(tempfile);
@@ -150,10 +147,61 @@ void commit(char *project){
 }
 
 void push(char *project){
-    puts("Push");
-    printf("Project: %s\n", project);
 
+    // check if project exists locally
+    struct stat st = {0};
+    if (stat(project, &st) == -1){
+        puts("Project doesn't exist in local repository.");
+        exit(EXIT_FAILURE);
+    }
+
+    // check if client has a .Commit file
+    if (!file_exists_local(project, ".Commit")){
+        puts("Project has no .Commit to push!");
+        exit(EXIT_FAILURE);
+    }
+
+    // check if project exists on server
     init_socket_server(&sock, "push");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // send local .Commit file md5sum to server and wait for acceptance
+    char *commitPath = malloc(strlen(project) + strlen("/.Commit") + 1);
+    sprintf(commitPath, "%s/.Commit", project);
+    char digest[32+1];
+    md5sum(commitPath, digest);
+    send_line(sock, digest);
+
+    int success = recv_int(sock);
+
+    if (success){
+        // generate a tar of all A/M files in .Commit and send to server
+        char *tar_name = generate_am_tar(commitPath);
+        send_file(tar_name, sock, 0);
+
+        // regenerate manifest file from .Commit
+        char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
+        sprintf(manifestPath, "%s/.Manifest", project);
+        regenerate_manifest(manifestPath, commitPath);
+
+        // send the manifest to the server
+        send_file(manifestPath, sock, 0);
+
+        remove(tar_name);
+        free(tar_name);
+        free(manifestPath);
+    } else {
+        puts("Client push rejected");
+    }
+
+    // cleanup
+    remove(commitPath);
+    free(commitPath);
     close(sock);
 }
 

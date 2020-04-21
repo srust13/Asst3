@@ -9,35 +9,25 @@
 
 #include "commands.h"
 
-#define MAX_CONNS 10
-
 int server_fd;
-file_buf_t conn_infos[MAX_CONNS];
-size_t free_threads[MAX_CONNS];
-size_t free_threads_idx;
-size_t num_free_threads;
-pthread_mutex_t free_threads_lock;
-pthread_cond_t free_threads_cond;
+project_t *projects;
+pthread_mutex_t p_lock = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
 
 void cleanup(){
     puts("Initiating cleanup on server termination...");
 
-    // wait for all threads to terminate
-    pthread_mutex_lock(&free_threads_lock);
-    while (num_free_threads < MAX_CONNS){
-        pthread_cond_wait(&free_threads_cond, &free_threads_lock);
-    }
-    pthread_mutex_unlock(&free_threads_lock);
-
-    // close socket
+    // close sockets
     close(server_fd);
+    while (projects){
+        project_t *next = projects->next;
+        if (projects->sock)
+            close(projects->sock);
+        free(projects->name);
+        free(projects);
+        projects = next;
+    }
 
-    /*
-        x shut down all threads
-        - close all sockets
-        - close all file descriptors
-        - free all memory
-    */
+    // free data
     puts("Done, thanks for waiting!");
 }
 
@@ -45,75 +35,103 @@ void sigint_handler(int s){
     exit(EXIT_SUCCESS);
 }
 
-void perform_cmd(int sock){
+project_t *get_proj_info(char *project){
+
+    // handle first project
+    if (!projects){
+        projects = calloc(1, sizeof(project_t));
+        projects->lock = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
+        projects->name = strdup(project);
+        return projects;
+    }
+
+    // search through linked list for matching project
+    project_t *match = NULL;
+    project_t *cur = projects;
+    while (cur->next){
+        if (!strcmp(cur->name, project)){
+            match = cur;
+            break;
+        }
+        cur = cur->next;
+    }
+
+    if (!match && !strcmp(cur->name, project))
+        match = cur;
+
+    if (!match){
+        cur->next = calloc(1, sizeof(project_t));
+        match = cur->next;
+        match->lock = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
+        match->name = strdup(project);
+    }
+    return match;
+}
+
+void perform_cmd(int sock, char *cmd, char *proj){
+    if (!strcmp(cmd, "checkout")){
+        checkout(sock, proj);
+    } else if (!strcmp(cmd, "update")){
+        update(sock, proj);
+    } else if (!strcmp(cmd, "upgrade")){
+        upgrade(sock, proj);
+    } else if (!strcmp(cmd, "commit")){
+        commit(sock, proj);
+    } else if (!strcmp(cmd, "push")){
+        push(sock, proj);
+    } else if (!strcmp(cmd, "create")){
+        create(sock, proj);
+    } else if (!strcmp(cmd, "destroy")){
+        destroy(sock, proj);
+    } else if (!strcmp(cmd, "currentversion")){
+        currentversion(sock, proj);
+    } else if (!strcmp(cmd, "history")){
+        history(sock, proj);
+    } else if (!strcmp(cmd, "rollback")){
+        rollback(sock, proj);
+    } else {
+        printf("Invalid command: %s\n", cmd);
+    }
+}
+
+void *handle_connection(void *sock_ptr){
+
+    // initialize socket and per-thread random seed
+    int sock = *((int *) sock_ptr);
     seed_rand();
+
     // read command
     char *command = recv_line(sock);
 
-    // perform command
-    if (!strcmp(command, "checkout")){
-        checkout(sock);
-    } else if (!strcmp(command, "update")){
-        update(sock);
-    } else if (!strcmp(command, "upgrade")){
-        upgrade(sock);
-    } else if (!strcmp(command, "commit")){
-        commit(sock);
-    } else if (!strcmp(command, "push")){
-        push(sock);
-    } else if (!strcmp(command, "create")){
-        create(sock);
-    } else if (!strcmp(command, "destroy")){
-        destroy(sock);
-    } else if (!strcmp(command, "currentversion")){
-        currentversion(sock);
-    } else if (!strcmp(command, "history")){
-        history(sock);
-    } else if (!strcmp(command, "rollback")){
-        rollback(sock);
-    } else {
-        printf("Invalid command: %s\n", command);
-        free(command);
-        close(sock);
-        exit(EXIT_FAILURE);
+    // read client project. create if "create" command.
+    char *project = set_create_project(sock, !strcmp(command, "create"));
+
+    // perform project locking and then run the command
+    if (project){
+        pthread_mutex_lock(&p_lock);
+        project_t *proj = get_proj_info(project);
+        pthread_mutex_unlock(&p_lock);
+
+        pthread_mutex_lock(&(proj->lock));
+        perform_cmd(sock, command, project);
+        pthread_mutex_unlock(&(proj->lock));
     }
-    free(command);
-}
-
-void *handle_connection(void *conninfo_idx){
-
-    // get socket fd
-    int conn_idx = *((int *) conninfo_idx);
-    file_buf_t *conn = &(conn_infos[conn_idx]);
-
-    // handle request
-    perform_cmd(conn->sock);
 
     // cleanup
-    close(conn->sock);
-
+    free(command);
+    free(project);
+    close(sock);
     puts("Client disconnected");
-    pthread_mutex_lock(&free_threads_lock);
-    size_t insert_idx = (conn_idx + num_free_threads++) % MAX_CONNS;
-    free_threads[insert_idx] = conn_idx;
-    pthread_mutex_unlock(&free_threads_lock);
-    pthread_cond_signal(&free_threads_cond);
     return 0;
 }
 
-void init(){
-    // initialize locks and condition vars
-    free_threads_lock = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
-    free_threads_cond = (pthread_cond_t) PTHREAD_COND_INITIALIZER;
+int main(int argc, char *argv[]){
 
-    // add all indexes to free threads buffer
-    pthread_mutex_lock(&free_threads_lock);
-    int i;
-    for (i = 0; i < MAX_CONNS; i++){
-        free_threads[i] = i;
+    // verify port arg
+    if (argc < 2){
+        puts("Missing port argument");
+        exit(EXIT_FAILURE);
     }
-    num_free_threads = MAX_CONNS;
-    pthread_mutex_unlock(&free_threads_lock);
 
     // register exit
     if (atexit(cleanup) != 0) {
@@ -123,24 +141,13 @@ void init(){
 
     // register sigint handler
     signal(SIGINT, sigint_handler);
-}
 
-int main(int argc, char *argv[]){
-    // initialize pthreads and exit handler
-    init();
-
-    // verify port arg
-    if (argc < 2){
-        puts("Missing port argument");
-        exit(EXIT_FAILURE);
-    }
-
+    // initialize socket
     struct sockaddr_in client, server;
     socklen_t c = sizeof(struct sockaddr_in);
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = INADDR_ANY;
     server.sin_port = htons(atoi(argv[1]));
-
     if (server.sin_port == 0 || server.sin_port > 65535) {
         puts("Invalid port argument");
         exit(EXIT_FAILURE);
@@ -160,7 +167,7 @@ int main(int argc, char *argv[]){
         puts("Couldn't bind to port");
         exit(EXIT_FAILURE);
     }
-    if (listen(server_fd, MAX_CONNS) < 0){
+    if (listen(server_fd, 100) < 0){
         puts("Couldn't listen on socket");
         exit(EXIT_FAILURE);
     }
@@ -168,30 +175,17 @@ int main(int argc, char *argv[]){
     puts("Server started! Waiting for connections...");
     while(1){
         int client_fd = accept(server_fd, (struct sockaddr *) &client, &c);
-
-        // get new free thread spot
-        pthread_mutex_lock(&free_threads_lock);
-        while (num_free_threads <= 0){
-            pthread_cond_wait(&free_threads_cond, &free_threads_lock);
-        }
-
-        int conninfo_idx = free_threads[free_threads_idx];
-        free_threads_idx = (free_threads_idx + 1) % MAX_CONNS;
-        num_free_threads--;
+        pthread_t thread_id;
         puts("Client connected");
-        pthread_mutex_unlock(&free_threads_lock);
-
-        // kick off pthread to handle client
-        conn_infos[conninfo_idx].sock = client_fd;
 
         // if you want to debug a single threaded app,
         // just un-comment the below line
         // and comment out the if-statement and its contents entirely
 
-        handle_connection((void *) &conninfo_idx);
+        handle_connection((void *) &client_fd);
 
-        // if(pthread_create(&(conn_infos[conninfo_idx].thread_id), NULL,
-        //                   handle_connection, (void *) &conninfo_idx) < 0){
+        // if(pthread_create(&thread_id, NULL,
+        //                   handle_connection, (void *) &client_fd) < 0){
         //     puts("Couldn't create thread");
         //     exit(EXIT_FAILURE);
         // }
