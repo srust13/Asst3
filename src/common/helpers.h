@@ -24,10 +24,12 @@ typedef struct file_buf_t {
 } file_buf_t;
 
 typedef struct manifest_line_t {
-    char *code;
+    char code;
     int  version;
-    char *hexdigest;
+    char hexdigest[32+1];
     char *fname;
+
+    struct manifest_line_t *next;
 } manifest_line_t;
 
 int file_exists_local(char *project, char *fname);
@@ -52,9 +54,9 @@ void gen_temp_filename(char *tempfile);
 void add_to_manifest(char *project, char *filenames);
 void remove_from_manifest(char *project, char *filenames);
 char *search_file_in_manifest(char *manifest, char *search);
-char *generate_manifest_line(char *code, char *hexdigest, int version, char *fname);
-void parse_manifest_line(manifest_line_t *ml, char *line);
+char *generate_manifest_line(char code, char *hexdigest, int version, char *fname);
+manifest_line_t *parse_manifest_line(char *line);
 void clean_manifest_line(manifest_line_t *ml);
 int generate_commit_file(char *commit, char *client_manifest, char *server_manifest);
 char* generate_am_tar(char *commitPath);
-void regenerate_manifest(char *client_manifest);
+void regenerate_manifest(char *client_manifest, char *commit);

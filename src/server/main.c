@@ -11,6 +11,7 @@
 
 int server_fd;
 project_t *projects;
+pthread_mutex_t p_lock = (pthread_mutex_t) PTHREAD_MUTEX_INITIALIZER;
 
 void cleanup(){
     puts("Initiating cleanup on server termination...");
@@ -107,7 +108,10 @@ void *handle_connection(void *sock_ptr){
 
     // perform project locking and then run the command
     if (project){
+        pthread_mutex_lock(&p_lock);
         project_t *proj = get_proj_info(project);
+        pthread_mutex_unlock(&p_lock);
+
         pthread_mutex_lock(&(proj->lock));
         perform_cmd(sock, command, project);
         pthread_mutex_unlock(&(proj->lock));

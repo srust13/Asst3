@@ -61,10 +61,10 @@ commit: add_remove
 	echo ${GREEN}PASS${NC} commit) || echo ${RED}FAIL${NC} commit
 
 push: commit
-	@(./tests/scripts/push.sh && \
+	@(./tests/scripts/push.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC} push) || echo ${RED}FAIL${NC} push
 
-run: currentversion destroy commit
+run: currentversion destroy push
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure
