@@ -12,6 +12,8 @@
 #include <sys/types.h>
 #include <sys/syscall.h>
 #include <errno.h>
+#include <stdlib.h>
+#include <dirent.h>
 
 #include "helpers.h"
 
@@ -478,6 +480,21 @@ void gen_temp_filename(char *tempfile){
     for(i = 5; i < 15; i++) {
         sprintf(tempfile + i, "%x", rand() % 16);
     }
+}
+
+/**
+ * Generate random commit file name.
+ * Must free pointer recieved from this method.
+ */
+ char* gen_commit_filename(char *project){
+    char *commitfile = malloc(strlen(project) + strlen("/.Commit_") + 10 + 1);
+    sprintf(commitfile, "%s/.Commit_", project);
+    int startIdx = strlen(commitfile);
+    int i;
+    for(i = startIdx; i < startIdx + 10; i++) {
+        sprintf(commitfile + i, "%x", rand() % 16);
+    }
+    return commitfile;
 }
 
 /**********************************************************************************
@@ -1054,9 +1071,73 @@ void regenerate_manifest(char *client_manifest){
 
 /**
  * For every .Commit file in the project dir, compute the hash of it 
- * If it's equal to the one we're receving, return 1
+ * If it's equal to the client commit hash, return name of that file
+ * If the commit file wasn't found, return null byte
  */
-void commit_exists(char *project){
+char* commit_exists(char *project, char *client_hex){
 
+    // open the project directory 
+    struct dirent *de;  
+    DIR *proj_dir = opendir(project);   
+    char *commitBuff = calloc(8, sizeof(char));
+
+    // go through the files of the project directory
+    while ((de = readdir(proj_dir)) != NULL) {
+        // only read files with names longer than ".Commit" length
+        if (strlen(de->d_name) >= 7) {
+            int i;
+            for (i = 0; i < 7; i++) {
+                commitBuff[i] = (de->d_name)[i];
+            }
+
+            // if the file name starts with .Commit, check its hash is the same as client .Commit
+            if (!strcmp(commitBuff, ".Commit")) {
+                char hexstring[33];
+                md5sum(de->d_name, hexstring);
+
+                // if hash is same, return file name
+                if (strcmp(hexstring, client_hex)) {
+                    return de->d_name;
+                }                
+            }
+        }
+    }   
+    closedir(proj_dir);   
+    free(commitBuff);  
+    return "\0";
 }
 
+/**
+ * Remove all .Commit files from given project
+ */
+void removeAllCommits(char *project) {
+
+    // open the project directory 
+    struct dirent *de;  
+    DIR *proj_dir = opendir(project);   
+    char *commitBuff = calloc(8, sizeof(char));
+    int commitFile_length = 18;
+
+    char *rm_commit_path = malloc(strlen(project) + strlen("/") + commitFile_length + 1);
+    
+    // go through the files of the project directory
+    while ((de = readdir(proj_dir)) != NULL) {
+        // only read files with names longer than ".Commit" length
+        if (strlen(de->d_name) >= 7) {
+            int i;
+            for (i = 0; i < 7; i++) {
+                commitBuff[i] = (de->d_name)[i];
+            }
+
+            // delete all .Commit files 
+            if (!strcmp(commitBuff, ".Commit")) {
+                sprintf(rm_commit_path, "%s/%s", project, de->d_name);
+                remove(rm_commit_path);
+            }
+        }
+    }   
+    closedir(proj_dir);   
+    free(commitBuff); 
+    free(rm_commit_path); 
+    return;
+}
