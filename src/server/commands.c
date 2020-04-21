@@ -46,18 +46,21 @@ void push(int sock, char *project){
     // .Commit md5sum recieved from client
     char *client_commit_hash = recv_line(sock);
     char *commitMatch = commit_exists(project, client_commit_hash);
+    free(client_commit_hash);
 
     // if received commit has expired; inform client and close connection
     if(!commitMatch) {
         send_int(sock, 0);
-        free(client_commit_hash);
         return;
     }
     send_int(sock, 1);
-    free(client_commit_hash);
+
+    // remove all files that have been deleted in the .Commit
+    removeAll_dFiles(commitMatch);
+    free(commitMatch);
 
     // Expire all .Commit files for this project
-    removeAllCommits(project);
+    remove_all_commits(project);
 
     // receive tar with changed files
     char temp_tar[15+1];
@@ -66,7 +69,7 @@ void push(int sock, char *project){
 
     // untar files into project directory
     char *untar_cmd = malloc(strlen("tar xzf ") + strlen(temp_tar) + 1);
-    sprintf(untar_cmd, "tar xzf %s", temp_tar, project);
+    sprintf(untar_cmd, "tar xzf %s", temp_tar);
     system(untar_cmd);
     free(untar_cmd);
 

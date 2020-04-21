@@ -173,7 +173,6 @@ void push(char *project){
     // send local .Commit file md5sum to server and wait for acceptance
     char *commitPath = malloc(strlen(project) + strlen("/.Commit") + 1);
     sprintf(commitPath, "%s/.Commit", project);
-
     char digest[32+1];
     md5sum(digest, commitPath);
     send_line(sock, digest);

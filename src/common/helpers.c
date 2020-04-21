@@ -1182,9 +1182,11 @@ char *commit_exists(char *project, char *client_hex){
 
                 // if hash is same, return file name
                 if (!strcmp(hexstring, client_hex)) {
+                    char *commit_name = malloc(strlen(de->d_name) + 1 );
+                    sprintf(commit_name, "%s", de->d_name);
                     free(commitBuff);
                     closedir(proj_dir);
-                    return de->d_name;
+                    return commit_name;
                 }
             }
         }
@@ -1226,4 +1228,24 @@ void remove_all_commits(char *project) {
     closedir(proj_dir);
     free(commitBuff);
     free(rm_commit_path);
+}
+
+void removeAll_dFiles(char *commit) {
+    // read from commit file
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, commit);
+
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml = parse_manifest_line(info->data);
+
+        // remove all "D" files
+        if (ml->code == 'D'){
+            remove(ml->fname);
+        }
+        clean_manifest_line(ml);
+    }
+    clean_file_buf(info);
 }
