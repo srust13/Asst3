@@ -50,6 +50,7 @@ void init_socket_server(int *sock, char *command);
 int server_project_exists(int sock, char *project);
 char *set_create_project(int sock, int should_create);
 void gen_temp_filename(char *tempfile);
+char* gen_commit_filename(char *project);
 
 void add_to_manifest(char *project, char *filenames);
 void remove_from_manifest(char *project, char *filenames);
