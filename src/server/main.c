@@ -104,10 +104,10 @@ void *handle_connection(void *sock_ptr){
 
     // read client project. create if "create" command.
     char *project = set_create_project(sock, !strcmp(command, "create"));
-    project_t *proj = get_proj_info(project);
 
     // perform project locking and then run the command
     if (project){
+        project_t *proj = get_proj_info(project);
         pthread_mutex_lock(&(proj->lock));
         perform_cmd(sock, command, project);
         pthread_mutex_unlock(&(proj->lock));
