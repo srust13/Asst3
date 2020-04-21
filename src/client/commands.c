@@ -174,7 +174,6 @@ void push(char *project){
     char *commitPath = malloc(strlen(project) + strlen("/.Commit") + 1);
     sprintf(commitPath, "%s/.Commit", project);
     
-    // send_file(commitPath, sock, 0); // TODO: delete this since we're going to be sending the md5sum
     char digest[32+1];
     md5sum(digest, commitPath);
     send_line(sock, digest);

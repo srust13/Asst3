@@ -45,6 +45,7 @@ void send_file(char *filename, int sock, int send_filename);
 void recv_file(int sock, char *dest);
 void send_directory(int sock, char *dirname);
 void recv_directory(int sock, char *dirname);
+void md5sum(char *filename, char *hexstring);
 void assert_project_exists_local(char *project);
 void init_socket_server(int *sock, char *command);
 int server_project_exists(int sock, char *project);
