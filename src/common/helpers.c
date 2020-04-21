@@ -1164,6 +1164,7 @@ char *commit_exists(char *project, char *client_hex){
     struct dirent *de;
     DIR *proj_dir = opendir(project);
     char *commitBuff = calloc(8, sizeof(char));
+    char hexstring[33];
 
     // go through the files of the project directory
     while ((de = readdir(proj_dir)) != NULL) {
@@ -1177,17 +1178,17 @@ char *commit_exists(char *project, char *client_hex){
             // if the file name starts with .Commit,
             // check that its hash is the same as client .Commit
             if (!strcmp(commitBuff, ".Commit")) {
-                char hexstring[33];
-                md5sum(de->d_name, hexstring);
+                char *buf = malloc(strlen(project) + 1 + strlen(de->d_name) + 1);
+                sprintf(buf, "%s/%s", project, de->d_name);
+                md5sum(buf, hexstring);
 
                 // if hash is same, return file name
                 if (!strcmp(hexstring, client_hex)) {
-                    char *commit_name = malloc(strlen(de->d_name) + 1 );
-                    sprintf(commit_name, "%s", de->d_name);
                     free(commitBuff);
                     closedir(proj_dir);
-                    return commit_name;
+                    return buf;
                 }
+                free(buf);
             }
         }
     }

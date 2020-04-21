@@ -174,7 +174,7 @@ void push(char *project){
     char *commitPath = malloc(strlen(project) + strlen("/.Commit") + 1);
     sprintf(commitPath, "%s/.Commit", project);
     char digest[32+1];
-    md5sum(digest, commitPath);
+    md5sum(commitPath, digest);
     send_line(sock, digest);
 
     int success = recv_int(sock);
@@ -195,6 +195,8 @@ void push(char *project){
         remove(tar_name);
         free(tar_name);
         free(manifestPath);
+    } else {
+        puts("Client push rejected");
     }
 
     // cleanup
