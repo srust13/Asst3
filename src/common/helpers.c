@@ -1156,6 +1156,18 @@ void regenerate_manifest(char *client_manifest, char *commit){
     move_file(tempfile, client_manifest);
 }
 
+/**
+ * Returns the version number of a manifest
+ */
+int get_manifest_version(char *manifest){
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+    read_file_until(info, ' ');
+    int manifest_version = atoi(info->data);
+    clean_file_buf(info);
+    return manifest_version;
+}
+
 /**********************************************************************************
                                   COMMIT HELPERS
 ***********************************************************************************/

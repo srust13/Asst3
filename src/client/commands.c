@@ -60,21 +60,13 @@ void update(char *project){
     // retrieve server .Manifest and parse version
     char tempfile[15+1];
     gen_temp_filename(tempfile);
-    recv_file(sock, tempfile);
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, tempfile);
-    read_file_until(info, ' ');
-    int server_manifest_version = atoi(info->data);
-    clean_file_buf(info);
+    recv_file(sock, tempfile);    
+    int server_manifest_version = get_manifest_version(tempfile);
 
     // retrieve client .Manifest and parse version
     char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
-    read_file_until(info, ' ');
-    int client_manifest_version = atoi(info->data);
-    clean_file_buf(info);
+    int client_manifest_version = get_manifest_version(manifest);
 
     // if client and server .Manifest versions are same: write blank .Update file and remove .Conflict 
     if (server_manifest_version == client_manifest_version){
@@ -135,20 +127,12 @@ void commit(char *project){
     char tempfile[15+1];
     gen_temp_filename(tempfile);
     recv_file(sock, tempfile);
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, tempfile);
-    read_file_until(info, ' ');
-    int server_manifest_version = atoi(info->data);
-    clean_file_buf(info);
+    int server_manifest_version = get_manifest_version(tempfile);
 
     // retrieve client .Manifest and parse version
     char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
-    read_file_until(info, ' ');
-    int client_manifest_version = atoi(info->data);
-    clean_file_buf(info);
+    int client_manifest_version = get_manifest_version(manifest);
 
     // verify .Manifest versions are equal
     if (server_manifest_version != client_manifest_version){
