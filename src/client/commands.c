@@ -57,6 +57,9 @@ void update(char *project){
         exit(EXIT_FAILURE);
     }
 
+    char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
+    sprintf(conflict, "%s/.Conflict", project);
+
     // retrieve server .Manifest and parse version
     char tempfile[15+1];
     gen_temp_filename(tempfile);
@@ -77,18 +80,21 @@ void update(char *project){
         sprintf(update, "%s/.Update", project);
         int fout = open(update, O_RDONLY | O_CREAT | O_TRUNC, 0644);
 
-        char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
-        sprintf(conflict, "%s/.Conflict", project);
-        remove(conflict);
-
         free(update);
-        free(conflict);
         close(fout);
     } else {
         // handle partial success and failure cases... create a .Conflict (if necessary) and .Update
         generate_update_conflict_files(project, manifest, tempfile);
     }
 
+    // remove .Conflict file if empty
+    struct stat st = {0};
+    stat(conflict, &st);
+    if (st.st_size == 0){
+        remove(conflict);
+    }
+
+    free(conflict);
     remove(tempfile);
     free(manifest);
     close(sock);

@@ -1033,7 +1033,7 @@ char *generate_am_tar(char *commitPath) {
     }
 
     // only tar if at least 1 file
-    if (file_count > 0) { 
+    if (file_count > 0) {
         system(cmd);
     }
 
@@ -1286,14 +1286,14 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
     // open .Update file to write to
     char *update = malloc(strlen(project) + strlen("/.Update") + 1);
     sprintf(update, "%s/.Update", project);
-    int fout = open(update, O_WRONLY | O_CREAT | O_TRUNC, 0644); 
+    int fout = open(update, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // open .Conflict file to write to
     char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
     sprintf(conflict, "%s/.Conflict", project);
     int fout_conflict = open(conflict, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-    // prepare server manifest for reading    
+    // prepare server manifest for reading
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
     init_file_buf(info, server_manifest);
 
@@ -1321,16 +1321,16 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
         }
         clean_manifest_line(ml_server);
         free(client_line);
-    }    
+    }
 
     // prepare client manifest for reading
     clean_file_buf(info);
     info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, client_manifest);    
+    init_file_buf(info, client_manifest);
 
     // skip first line of manifest
-    read_file_until(info, ' ');  
-    char hexstring[33];  
+    read_file_until(info, ' ');
+    char hexstring[33];
 
     // go through all lines in client .Manifest
     while (1){
@@ -1340,7 +1340,7 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
         manifest_line_t *ml_client = parse_manifest_line(info->data);
         char *server_line = search_file_in_manifest(server_manifest, ml_client->fname);
 
-        // if a file in client .Manifest can't be found in server .Manifest, make it "D" in .Update 
+        // if a file in client .Manifest can't be found in server .Manifest, make it "D" in .Update
         if(!server_line){
             char *entry_line = generate_manifest_line('D', ml_client->hexdigest, ml_client->version, ml_client->fname);
             write(fout, entry_line, strlen(entry_line));
@@ -1355,7 +1355,7 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
 
             // if the client .Manifest file version and hash are different from the server .Manifest
             if (ml_client->version != ml_server->version && strcmp(ml_client->hexdigest, ml_server->hexdigest)){
-                
+
                 // if the live hash of the client file matches the hash in the client manifest, mark it "M" in .Update
                 md5sum(ml_client->fname, hexstring);
                 if (!strcmp(hexstring, ml_client->hexdigest)){
@@ -1380,22 +1380,14 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                 }
             }
             clean_manifest_line(ml_server);
-            // TODO: if version numbers always change upon modified, there will be no else case. Confirm 
         }
         clean_manifest_line(ml_client);
         free(server_line);
     }
 
-    // remove .Conflict file if empty
-    struct stat st = {0};
-    stat(conflict, &st);
-    if (st.st_size == 0){
-        remove(conflict);
-    }
-    
-    // clean up    
+    // clean up
     free(update);
-    free(conflict);    
+    free(conflict);
     close(fout);
     close(fout_conflict);
     clean_file_buf(info);
