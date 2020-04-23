@@ -48,10 +48,55 @@ void checkout(char *project){
 }
 
 void update(char *project){
-    puts("Update");
-    printf("Project: %s\n", project);
-
+    // connect to server and make sure project exists
     init_socket_server(&sock, "update");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
+    sprintf(conflict, "%s/.Conflict", project);
+
+    // retrieve server .Manifest and parse version
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    recv_file(sock, tempfile);
+    int server_manifest_version = get_manifest_version(tempfile);
+
+    // retrieve client .Manifest and parse version
+    char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
+    int client_manifest_version = get_manifest_version(manifest);
+
+    // if client and server .Manifest versions are same: write blank .Update file and remove .Conflict
+    if (server_manifest_version == client_manifest_version){
+        puts("Client and server .Manifest versions match!");
+        puts("Up to date.");
+
+        char *update = malloc(strlen(project) + strlen("/.Update") + 1);
+        sprintf(update, "%s/.Update", project);
+        int fout = open(update, O_RDONLY | O_CREAT | O_TRUNC, 0644);
+
+        free(update);
+        close(fout);
+    } else {
+        // handle partial success and failure cases... create a .Conflict (if necessary) and .Update
+        generate_update_conflict_files(project, manifest, tempfile);
+    }
+
+    // remove .Conflict file if empty
+    struct stat st = {0};
+    stat(conflict, &st);
+    if (st.st_size == 0){
+        remove(conflict);
+    }
+
+    free(conflict);
+    remove(tempfile);
+    free(manifest);
     close(sock);
 }
 
@@ -94,20 +139,12 @@ void commit(char *project){
     char tempfile[15+1];
     gen_temp_filename(tempfile);
     recv_file(sock, tempfile);
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, tempfile);
-    read_file_until(info, ' ');
-    int server_manifest_version = atoi(info->data);
-    clean_file_buf(info);
+    int server_manifest_version = get_manifest_version(tempfile);
 
     // retrieve client .Manifest and parse version
     char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
-    read_file_until(info, ' ');
-    int client_manifest_version = atoi(info->data);
-    clean_file_buf(info);
+    int client_manifest_version = get_manifest_version(manifest);
 
     // verify .Manifest versions are equal
     if (server_manifest_version != client_manifest_version){

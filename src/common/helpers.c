@@ -305,6 +305,9 @@ void mkpath(char* file_path) {
  * Send file over socket and wait for ACK.
  */
 void send_file(char *filename, int sock, int send_filename){
+    // check if file exists
+    struct stat st = {0};
+    int exists = stat(filename, &st) != -1;
 
     // send filename if we should
     send_int(sock, send_filename);
@@ -313,21 +316,22 @@ void send_file(char *filename, int sock, int send_filename){
     }
 
     // send file size
-    struct stat st = {0};
-    stat(filename, &st);
     send_int(sock, st.st_size);
 
-    // send file data
-    int fd = open(filename, O_RDONLY, 0);
+    if(exists){
 
-    int eof = 0;
-    while (!eof){
-        int bytes_read = 0;
-        char *data = read_file_chunk(fd, &bytes_read, &eof);
-        write(sock, data, bytes_read);
-        free(data);
+        // send file data
+        int fd = open(filename, O_RDONLY, 0);
+
+        int eof = 0;
+        while (!eof){
+            int bytes_read = 0;
+            char *data = read_file_chunk(fd, &bytes_read, &eof);
+            write(sock, data, bytes_read);
+            free(data);
+        }
+        close(fd);
     }
-    close(fd);
 
     // wait for ACK
     wait_for_ack(sock);
@@ -496,7 +500,7 @@ void gen_temp_filename(char *tempfile){
 
 /**
  * Generate random commit file name.
- * Must free pointer recieved from this method.
+ * The returned pointer must be freed.
  */
  char* gen_commit_filename(char *project){
     char *commitfile = malloc(strlen(project) + strlen("/.Commit_") + 10 + 1);
@@ -1027,7 +1031,11 @@ char *generate_am_tar(char *commitPath) {
         cur += strlen(files_to_tar[i]);
         free(files_to_tar[i]);
     }
-    system(cmd);
+
+    // only tar if at least 1 file
+    if (file_count > 0) {
+        system(cmd);
+    }
 
     // cleanup
     free(cmd);
@@ -1149,6 +1157,18 @@ void regenerate_manifest(char *client_manifest, char *commit){
     move_file(tempfile, client_manifest);
 }
 
+/**
+ * Returns the version number of a manifest
+ */
+int get_manifest_version(char *manifest){
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+    read_file_until(info, ' ');
+    int manifest_version = atoi(info->data);
+    clean_file_buf(info);
+    return manifest_version;
+}
+
 /**********************************************************************************
                                   COMMIT HELPERS
 ***********************************************************************************/
@@ -1231,6 +1251,9 @@ void remove_all_commits(char *project) {
     free(rm_commit_path);
 }
 
+/**
+ * Remove all files marked "D" in .Commit
+ */
 void removeAll_dFiles(char *commit) {
     // read from commit file
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
@@ -1248,5 +1271,124 @@ void removeAll_dFiles(char *commit) {
         }
         clean_manifest_line(ml);
     }
+    clean_file_buf(info);
+}
+
+/**********************************************************************************
+                                  UPDATE HELPERS
+***********************************************************************************/
+
+/**
+ * Go through server and client manifests and note status codes of files in .Update
+ * If there are any conflicts, create a .Conflict
+ */
+void generate_update_conflict_files(char *project, char *client_manifest, char *server_manifest){
+    // open .Update file to write to
+    char *update = malloc(strlen(project) + strlen("/.Update") + 1);
+    sprintf(update, "%s/.Update", project);
+    int fout = open(update, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    // open .Conflict file to write to
+    char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
+    sprintf(conflict, "%s/.Conflict", project);
+    int fout_conflict = open(conflict, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    // prepare server manifest for reading
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, server_manifest);
+
+    // skip first line of manifest
+    read_file_until(info, '\n');
+
+    // go through all lines in server .Manifest
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml_server = parse_manifest_line(info->data);
+        char *client_line = search_file_in_manifest(client_manifest, ml_server->fname);
+
+        // if a file in server .Manifest can't be found in client .Manifest, make it "A" in .Update
+        if(!client_line){
+            char *entry_line = generate_manifest_line('A', ml_server->hexdigest, ml_server->version, ml_server->fname);
+            write(fout, entry_line, strlen(entry_line));
+
+            char *a_fpath = malloc(strlen("A ") + strlen(ml_server->fname) + 1);
+            sprintf(a_fpath, "A %s", ml_server->fname);
+            puts(a_fpath);
+            free(a_fpath);
+            free(entry_line);
+        }
+        clean_manifest_line(ml_server);
+        free(client_line);
+    }
+
+    // prepare client manifest for reading
+    clean_file_buf(info);
+    info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, client_manifest);
+
+    // skip first line of manifest
+    read_file_until(info, ' ');
+    char hexstring[33];
+
+    // go through all lines in client .Manifest
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml_client = parse_manifest_line(info->data);
+        char *server_line = search_file_in_manifest(server_manifest, ml_client->fname);
+
+        // if a file in client .Manifest can't be found in server .Manifest, make it "D" in .Update
+        if(!server_line){
+            char *entry_line = generate_manifest_line('D', ml_client->hexdigest, ml_client->version, ml_client->fname);
+            write(fout, entry_line, strlen(entry_line));
+
+            char *d_fpath = malloc(strlen("D ") + strlen(ml_client->fname) + 1);
+            sprintf(d_fpath, "D %s", ml_client->fname);
+            puts(d_fpath);
+            free(d_fpath);
+            free(entry_line);
+        } else {
+            manifest_line_t *ml_server = parse_manifest_line(server_line);
+
+            // if the client .Manifest file version and hash are different from the server .Manifest
+            if (ml_client->version != ml_server->version && strcmp(ml_client->hexdigest, ml_server->hexdigest)){
+
+                // if the live hash of the client file matches the hash in the client manifest, mark it "M" in .Update
+                md5sum(ml_client->fname, hexstring);
+                if (!strcmp(hexstring, ml_client->hexdigest)){
+                    char *entry_line = generate_manifest_line('M', ml_client->hexdigest, ml_client->version, ml_client->fname);
+                    write(fout, entry_line, strlen(entry_line));
+
+                    char *m_fpath = malloc(strlen("M ") + strlen(ml_client->fname) + 1);
+                    sprintf(m_fpath, "M %s", ml_client->fname);
+                    puts(m_fpath);
+                    free(m_fpath);
+                    free(entry_line);
+                } else {
+                    // server has updated data for the client, but the user has changed that file locally... write to .Conflict
+                    char *entry_line = generate_manifest_line('C', ml_client->hexdigest, ml_client->version, ml_client->fname);
+                    write(fout_conflict, entry_line, strlen(entry_line));
+
+                    char *c_fpath = malloc(strlen("C ") + strlen(ml_client->fname) + 1);
+                    sprintf(c_fpath, "C %s", ml_client->fname);
+                    puts(c_fpath);
+                    free(c_fpath);
+                    free(entry_line);
+                }
+            }
+            clean_manifest_line(ml_server);
+        }
+        clean_manifest_line(ml_client);
+        free(server_line);
+    }
+
+    // clean up
+    free(update);
+    free(conflict);
+    close(fout);
+    close(fout_conflict);
     clean_file_buf(info);
 }
