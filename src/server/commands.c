@@ -17,7 +17,7 @@ void update(int sock, char *project){
     char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
     send_file(manifest, sock, 0);
-    free(manifest);    
+    free(manifest);
 }
 
 void upgrade(int sock, char *project){
@@ -119,5 +119,47 @@ void history(int sock, char *project){
 }
 
 void rollback(int sock, char *project){
-    puts("Rollback");
+    char *version = recv_line(sock);
+
+    // check if project version exists
+    char *manifest_backup = malloc(
+        strlen("backups/") + strlen(project) + strlen("/.Manifest_") + strlen(version) + 1);
+    sprintf(manifest_backup, "backups/%s/.Manifest_%s", project, version);
+    struct stat st = {0};
+    int exists = stat(manifest_backup, &st) != -1;
+    if (!exists){
+        send_int(sock, exists);
+        return;
+    }
+    free(manifest_backup);
+
+    // create temp dir for extraction
+    char tempdir[15+1];
+    gen_temp_filename(tempdir);
+    mkdir(tempdir, 0755);
+
+    // extract manifest to tempdir
+    char *manifest = malloc(strlen(tempdir) + 1 + strlen(project) + strlen("/.Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
+    rollback_file(manifest, atoi(version), tempdir);
+    sprintf(manifest, "%s/%s/.Manifest", tempdir, project);
+
+    // open and read manifest line-by-line
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+    read_file_until(info, '\n');
+
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml = parse_manifest_line(info->data);
+        rollback_file(ml->fname, ml->version, tempdir);
+        clean_manifest_line(ml);
+    }
+    clean_file_buf(info);
+    free(version);
+
+    // move tempdir to realdir
+    send_int(sock, exists);
 }

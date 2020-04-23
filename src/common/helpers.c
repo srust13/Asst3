@@ -162,6 +162,38 @@ int file_exists_local(char *project, char *fname){
     return found;
 }
 
+/**
+ * Extract backup file to tempdir. All newer versions of that
+ * file in the backup directory are deleted.
+ */
+void rollback_file(char *fname, int version, char *tempdir){
+    // convert filename version to string
+    char fversion[10];
+    sprintf(fversion, "%d", version);
+
+    // untar backup file to folder
+    char *backup = malloc(strlen("backups/") + strlen(fname) + 1 + 10 + 1);
+    sprintf(backup, "backups/%s_%s", fname, fversion);
+
+    char *cmd = malloc(strlen("tar -xzf ") + strlen(backup) + strlen(" -C ") + strlen(tempdir) + 1);
+    sprintf(cmd, "tar -xzf %s -C %s", backup, tempdir);
+    system(cmd);
+    free(cmd);
+
+    // remove all older versions of file from backup
+    struct stat st = {0};
+    int i = version+1;
+    for (;;i++){
+        sprintf(backup, "backups/%s_%d", fname, i);
+        if (stat(backup, &st) != -1){
+            remove(backup);
+        } else{
+            break;
+        }
+    }
+    free(backup);
+}
+
 void init_file_buf(file_buf_t *info, char *filename) {
     info->fd = open(filename, O_RDONLY);
     info->data = malloc(CHUNK_SIZE);
@@ -305,9 +337,6 @@ void mkpath(char* file_path) {
  * Send file over socket and wait for ACK.
  */
 void send_file(char *filename, int sock, int send_filename){
-    // check if file exists
-    struct stat st = {0};
-    int exists = stat(filename, &st) != -1;
 
     // send filename if we should
     send_int(sock, send_filename);
@@ -316,6 +345,8 @@ void send_file(char *filename, int sock, int send_filename){
     }
 
     // send file size
+    struct stat st = {0};
+    int exists = stat(filename, &st) != -1;
     send_int(sock, st.st_size);
 
     if(exists){
