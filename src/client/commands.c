@@ -48,10 +48,51 @@ void checkout(char *project){
 }
 
 void update(char *project){
-    puts("Update");
-    printf("Project: %s\n", project);
-
+    // connect to server and make sure project exists
     init_socket_server(&sock, "update");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+    
+    // retrieve server .Manifest and parse version
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    recv_file(sock, tempfile);
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, tempfile);
+    read_file_until(info, ' ');
+    int server_manifest_version = atoi(info->data);
+    clean_file_buf(info);
+
+    // retrieve client .Manifest and parse version
+    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
+    info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+    read_file_until(info, ' ');
+    int client_manifest_version = atoi(info->data);
+    clean_file_buf(info);
+
+    // if client and server .Manifest versions are same: write blank .Update file and remove .Conflict 
+    if (server_manifest_version == client_manifest_version){
+        puts("Client and server .Manifest versions match!");
+        puts("Up to date.");
+        
+        int fout = open(".Update", O_RDONLY | O_CREAT | O_TRUNC, 0644);
+        remove(".Conflict");
+        
+        free(manifest);
+        remove(tempfile);
+        close(sock);
+        close(fout);
+        exit(EXIT_FAILURE); // TODO: not necessarily exist failure?
+    }
+
+    // handle partial success and failure cases... create a .Conflict (if necessary) and .Update
+    generate_update_conflict_files(project, manifest, tempfile);
     close(sock);
 }
 

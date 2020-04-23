@@ -66,3 +66,5 @@ char* gen_commit_filename(char *project);
 void remove_all_commits(char *project);
 void removeAll_dFiles(char *commit);
 char *commit_exists(char *project, char *client_hex);
+
+void generate_update_conflict_files(char *project, char *client_manifest, char *server_manifest);
