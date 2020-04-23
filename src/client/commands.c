@@ -64,7 +64,7 @@ void update(char *project){
     int server_manifest_version = get_manifest_version(tempfile);
 
     // retrieve client .Manifest and parse version
-    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
+    char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
     int client_manifest_version = get_manifest_version(manifest);
 
@@ -72,19 +72,20 @@ void update(char *project){
     if (server_manifest_version == client_manifest_version){
         puts("Client and server .Manifest versions match!");
         puts("Up to date.");
-        
-        int fout = open(".Update", O_RDONLY | O_CREAT | O_TRUNC, 0644);
-        remove(".Conflict");
-        
-        free(manifest);
-        remove(tempfile);
-        close(sock);
+
+        char *update = malloc(strlen(project) + strlen("/.Update") + 1);
+        sprintf(update, "%s/.Update", project);
+        int fout = open(update, O_RDONLY | O_CREAT | O_TRUNC, 0644);
+        remove(".Conflict");  
+        free(update);      
         close(fout);
-        exit(EXIT_FAILURE); // TODO: not necessarily exist failure?
+    } else {
+        // handle partial success and failure cases... create a .Conflict (if necessary) and .Update
+        generate_update_conflict_files(project, manifest, tempfile);
     }
 
-    // handle partial success and failure cases... create a .Conflict (if necessary) and .Update
-    generate_update_conflict_files(project, manifest, tempfile);
+    remove(tempfile);
+    free(manifest);    
     close(sock);
 }
 

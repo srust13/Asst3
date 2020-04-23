@@ -14,7 +14,7 @@ void checkout(int sock, char *project){
 
 void update(int sock, char *project){
     // send manifest
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 1);
+    char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
     send_file(manifest, sock, 0);
     free(manifest);    
