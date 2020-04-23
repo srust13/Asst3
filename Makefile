@@ -64,7 +64,11 @@ push: commit
 	@(./tests/scripts/push.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC} push) || echo ${RED}FAIL${NC} push
 
-run: currentversion destroy push
+update: push
+	@(./tests/scripts/update.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC} update) || echo ${RED}FAIL${NC} update
+
+run: currentversion destroy update
 
 clean:
-	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure
+	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure tests_out/client2

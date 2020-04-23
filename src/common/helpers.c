@@ -317,17 +317,20 @@ void send_file(char *filename, int sock, int send_filename){
     stat(filename, &st);
     send_int(sock, st.st_size);
 
-    // send file data
-    int fd = open(filename, O_RDONLY, 0);
+    if(st.st_size > 0){
 
-    int eof = 0;
-    while (!eof){
-        int bytes_read = 0;
-        char *data = read_file_chunk(fd, &bytes_read, &eof);
-        write(sock, data, bytes_read);
-        free(data);
+        // send file data
+        int fd = open(filename, O_RDONLY, 0);
+
+        int eof = 0;
+        while (!eof){
+            int bytes_read = 0;
+            char *data = read_file_chunk(fd, &bytes_read, &eof);
+            write(sock, data, bytes_read);
+            free(data);
+        }
+        close(fd);
     }
-    close(fd);
 
     // wait for ACK
     wait_for_ack(sock);
@@ -1027,7 +1030,11 @@ char *generate_am_tar(char *commitPath) {
         cur += strlen(files_to_tar[i]);
         free(files_to_tar[i]);
     }
-    system(cmd);
+
+    // only tar if at least 1 file
+    if (file_count > 0) { 
+        system(cmd);
+    }
 
     // cleanup
     free(cmd);
@@ -1262,6 +1269,9 @@ void removeAll_dFiles(char *commit) {
  * Go through server and client manifests and note status codes of files in .Update
  * If there are any conflicts, create a .Conflict
  */
+
+//TODO: Really stupid edge case: if the file is in .Update and then becomes a .Conflict, we need to remove it from .Update
+ 
 void generate_update_conflict_files(char *project, char *client_manifest, char *server_manifest){
     // open .Update file to write to
     char *update = malloc(strlen(project) + 1 + strlen(".Update") + 1);
@@ -1339,7 +1349,7 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                 
                 // if the live hash of the client file matches the hash in the client manifest, mark it "M" in .Update
                 md5sum(ml_client->fname, hexstring);
-                if (strcmp(hexstring, ml_client->hexdigest)){
+                if (!strcmp(hexstring, ml_client->hexdigest)){
                     entry_line = generate_manifest_line('M', ml_client->hexdigest, ml_client->version, ml_client->fname);
                     write(fout, entry_line, strlen(entry_line));
 
@@ -1361,7 +1371,7 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                     }
 
                     entry_line = generate_manifest_line('C', ml_client->hexdigest, ml_client->version, ml_client->fname);
-                    write(fout, entry_line, strlen(entry_line));
+                    write(fout_conflict, entry_line, strlen(entry_line));
 
                     char *c_fpath = malloc(strlen("C ") + strlen(ml_client->fname) + 1);
                     sprintf(c_fpath, "C %s", ml_client->fname);

@@ -71,11 +71,15 @@ void push(int sock, char *project){
     gen_temp_filename(temp_tar);
     recv_file(sock, temp_tar);
 
-    // untar files into project directory
-    char *untar_cmd = malloc(strlen("tar xzf ") + strlen(temp_tar) + 1);
-    sprintf(untar_cmd, "tar xzf %s", temp_tar);
-    system(untar_cmd);
-    free(untar_cmd);
+    // untar files into project directory if we have non-empty tar
+    struct stat st = {0};
+    stat(temp_tar, &st);
+    if(st.st_size > 0){
+        char *untar_cmd = malloc(strlen("tar xzf ") + strlen(temp_tar) + 1);
+        sprintf(untar_cmd, "tar xzf %s", temp_tar);
+        system(untar_cmd);
+        free(untar_cmd);
+    }
 
     // replace old .Manifest with new updated .Manifest from client
     char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
