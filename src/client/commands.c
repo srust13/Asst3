@@ -300,10 +300,11 @@ void history(char *project){
 }
 
 void rollback(char *project, char *version){
-    puts("Rollback");
-    printf("Project: %s\n", project);
-    printf("Version: %s\n", version);
-
     init_socket_server(&sock, "rollback");
+    send_line(sock, version);
+    if (!recv_int(sock)){
+        puts("Version not found on server!");
+        exit(EXIT_FAILURE);
+    }
     close(sock);
 }

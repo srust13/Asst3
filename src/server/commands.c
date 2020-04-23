@@ -111,5 +111,9 @@ void history(int sock, char *project){
 }
 
 void rollback(int sock, char *project){
-    puts("Rollback");
+    char *version = recv_line(sock);
+
+    // check if project version exists
+    int success = 0;
+    send_int(success);
 }
