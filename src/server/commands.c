@@ -22,11 +22,6 @@ void update(int sock, char *project){
 }
 
 void upgrade(int sock, char *project){
-    // send manifest version to client
-    char *manifest;
-    asprintf(&manifest, "%s/.Manifest", project);
-    send_int(sock, get_manifest_version(manifest));
-    free(manifest);
 
     // recieve client .Update
     char update[15+1];
@@ -39,6 +34,12 @@ void upgrade(int sock, char *project){
     remove(tar);
     remove(update);
     free(tar);
+
+    // send manifest version to client
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    send_int(sock, get_manifest_version(manifest));
+    free(manifest);
 }
 
 void commit(int sock, char *project){

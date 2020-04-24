@@ -1177,19 +1177,13 @@ int get_manifest_version(char *manifest){
 }
 
 /**
- * After pushing, recreate the Manifest file with
+ * After upgrade, recreate the Manifest file with
  * <code> = "-" on client to files using .Update
  *
  * The line is added in the form:
  * <code> <md5_hexdigest> <version> <filename><\n>
  */
-void regenerate_manifest_from_update(char *manifest, char *update){
-
-    // get list of all "modified" files from update
-    manifest_line_t *mod_lines = modified_files_from_commit(update);
-
-    // read from client manifest
-    file_buf_t *info = init_file_buf(manifest);
+void regenerate_manifest_from_update(char *manifest, char *update, int server_man_version){
 
     // open tempfile to write new manifest to
     char tempfile[15+1];
@@ -1197,53 +1191,52 @@ void regenerate_manifest_from_update(char *manifest, char *update){
     int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // write the project version to the temp file
+    file_buf_t *info = init_file_buf(manifest);
     read_file_until(info, ' ');
-    write(fout, info->data, strlen(info->data));
+    char *server_manifest_version;
+    asprintf(&server_manifest_version, "%d", server_man_version);
+    write(fout, server_manifest_version, strlen(server_manifest_version));
     write(fout, " ", 1);
+    free(server_manifest_version);
 
     // write the project name
     read_file_until(info, '\n');
     write_line(fout, info->data);
 
     // go line by line in manifest
+    // 1. Omit D lines
+    // 2. Update M lines
+    // 3. Append A lines to the end (done later)
     while (1){
         read_file_until(info, '\n');
         if (info->file_eof)
             break;
         manifest_line_t *ml = parse_manifest_line(info->data);
 
-        // if this line appears in "modified" list,
-        // get new hash and version num
-        if (ml->code == '-'){
-            manifest_line_t *cur = mod_lines;
-            while (cur){
-                if (!strcmp(ml->fname, cur->fname)){
-                    strcpy(ml->hexdigest, cur->hexdigest);
-                    ml->version = cur->version;
-                    break;
-                }
-                cur = cur->next;
-            }
+        // search in update for the file. if not found, just add to manifest.
+        char *update_line = search_file_in_manifest(update, ml->fname);
+        if (!update_line) {
+            write_line(fout, info->data);
+            clean_manifest_line(ml);
+            continue;
         }
 
-        // write new line to tempfile
-        char *newline = generate_manifest_line(ml->code, ml->hexdigest, ml->version, ml->fname);
-        write(fout, newline, strlen(newline));
-        free(newline);
+        // if "modify", just write the new line
+        manifest_line_t *ml_update = parse_manifest_line(update_line);
+        if (ml_update->code == 'M'){
+            char *new_line = generate_manifest_line(
+                '-', ml_update->hexdigest, ml_update->version, ml_update->fname);
+            write(fout, new_line, strlen(new_line));
+            free(new_line);
+        }
+
         clean_manifest_line(ml);
+        clean_manifest_line(ml_update);
     }
-
-    while (mod_lines){
-        manifest_line_t *next = mod_lines->next;
-        clean_manifest_line(mod_lines);
-        mod_lines = next;
-    }
-
-    // prepare to read update file
     clean_file_buf(info);
-    info = init_file_buf(update);
 
-    // go through the lines of update
+    // add entries for "A" lines in Update file
+    info = init_file_buf(update);
     while(1) {
         read_file_until(info, '\n');
         if (info->file_eof)
@@ -1258,88 +1251,8 @@ void regenerate_manifest_from_update(char *manifest, char *update){
     }
 
     close(fout);
-    move_file(tempfile, manifest);
-}
-
-/**
- * Remove all files marked "D" in update from the manifest.
- */
-void remove_dFiles_from_manifest(char *manifest, char *update, int server_manifest_version){
-    file_buf_t *info = init_file_buf(update);
-
-    int file_count = 0;
-    int max_file_count = 50;
-    char **files_to_delete = malloc(max_file_count * sizeof(char *));
-
-    // for each line in update
-    while (1){
-        read_file_until(info, '\n');
-        if (info->file_eof)
-            break;
-        manifest_line_t *ml = parse_manifest_line(info->data);
-
-        // add "D" coded files to array
-        if (ml->code == 'D'){
-            if (file_count >= max_file_count){
-                max_file_count *= 2;
-                files_to_delete = realloc(files_to_delete, max_file_count * sizeof(char *));
-            }
-            files_to_delete[file_count++] = strdup(ml->fname);
-        }
-        clean_manifest_line(ml);
-    }
-
-    // prepare manifest for reading
     clean_file_buf(info);
-    info = init_file_buf(manifest);
-
-    // open tempfile to write new manifest to
-    char tempfile[15+1];
-    gen_temp_filename(tempfile);
-    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-
-    // write the project version of the server
-    read_file_until(info, ' ');
-    char *proj_version_numb;
-    asprintf(&proj_version_numb, "%d", server_manifest_version);
-    write(fout, proj_version_numb, strlen(proj_version_numb));
-    write(fout, " ", 1);
-
-    // write the project name
-    read_file_until(info, '\n');
-    write_line(fout, info->data);
-    int i;
-
-    // go line by line in manifest
-    while (1){
-        read_file_until(info, '\n');
-        if (info->file_eof)
-            break;
-        manifest_line_t *ml = parse_manifest_line(info->data);
-
-        // make sure file is not to be deleted
-        int found = 0;
-        for (i = 0; i < file_count; i++) {
-            if(!strcmp(ml->fname, files_to_delete[i])) {
-                found = 1;
-            }
-        }
-
-        // if it's not in deleted, write to tempfile
-        if (!found){
-            write_line(fout, info->data);
-        }
-        clean_manifest_line(ml);
-    }
-
     move_file(tempfile, manifest);
-
-    // clean up
-    for (i = 0; i < file_count; i++) {
-        free(files_to_delete[i]);
-    }
-    free(files_to_delete);
-    clean_file_buf(info);
 }
 
 /**********************************************************************************

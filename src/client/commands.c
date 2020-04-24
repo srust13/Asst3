@@ -138,19 +138,10 @@ void upgrade(char *project){
         exit(EXIT_FAILURE);
     }
 
-    // remove all files from .Manifest marked "D" in update
-    // using server manifest version
-    int server_manifest_version = recv_int(sock);
-
-    char *manifest;
-    asprintf(&manifest, "%s/.Manifest", project);
-    remove_dFiles_from_manifest(manifest, update, server_manifest_version);
-    free(manifest);
-
-    // recieve tar of modified and added files from server
-    send_file(update, sock, 0);
+    // receive tar of modified/added files from server
     char tempfile[15+1];
     gen_temp_filename(tempfile);
+    send_file(update, sock, 0);
     recv_file(sock, tempfile);
 
     // if tar is not empty, untar it into project
@@ -165,9 +156,14 @@ void upgrade(char *project){
     remove(tempfile);
 
     // after pulling in all changes, recreate
-    // manifest to account for modified/added files
-    regenerate_manifest_from_update(manifest, update);
+    // using server manifest version and update information
+    int server_manifest_version = recv_int(sock);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    regenerate_manifest_from_update(manifest, update, server_manifest_version);
 
+    // cleanup
+    free(manifest);
     remove(update);
     free(update);
     free(conflict);
