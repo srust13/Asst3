@@ -25,8 +25,7 @@ void upgrade(int sock, char *project){
     // send manifest version to client
     char *manifest;
     asprintf(&manifest, "%s/.Manifest", project);
-    int server_manifest_version = get_manifest_version(manifest);
-    send_int(sock, server_manifest_version);
+    send_int(sock, get_manifest_version(manifest));
     free(manifest);
 
     // recieve client .Update
@@ -34,11 +33,11 @@ void upgrade(int sock, char *project){
     gen_temp_filename(update);
     recv_file(sock, update);
 
-    // generate tar of added and modified files from server and send to client
+    // generate tar of added/modified files and send to client
     char *tar = generate_am_tar(update);
     send_file(tar, sock, 0);
-
     remove(tar);
+    remove(update);
     free(tar);
 }
 

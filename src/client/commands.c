@@ -138,39 +138,37 @@ void upgrade(char *project){
         exit(EXIT_FAILURE);
     }
 
-    char *manifest;
-    asprintf(&manifest, "%s/.Manifest", project);
-
-    // retrieve server .Manifest version
+    // remove all files from .Manifest marked "D" in update
+    // using server manifest version
     int server_manifest_version = recv_int(sock);
 
-    // remove all files from .Manifest marked "D" in update
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     remove_dFiles_from_manifest(manifest, update, server_manifest_version);
-
-    // send .Update file to server
-    send_file(update, sock, 0);
+    free(manifest);
 
     // recieve tar of modified and added files from server
-    char tar[15+1];
-    gen_temp_filename(tar);
-    recv_file(sock, tar);
+    send_file(update, sock, 0);
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    recv_file(sock, tempfile);
 
     // if tar is not empty, untar it into project
     struct stat st_tar = {0};
-    stat(tar, &st_tar);
+    stat(tempfile, &st_tar);
     if(st_tar.st_size > 0){
-        char *untar_cmd = malloc(strlen("tar xzf ") + strlen(tar) + 1);
-        sprintf(untar_cmd, "tar xzf %s", tar);
+        char *untar_cmd;
+        asprintf(&untar_cmd, "tar xzf %s", tempfile);
         system(untar_cmd);
         free(untar_cmd);
-        remove(tar);
     }
+    remove(tempfile);
 
-    // after pulling in all changes, recreate the manifest to account for modified/added files
+    // after pulling in all changes, recreate
+    // manifest to account for modified/added files
     regenerate_manifest_from_update(manifest, update);
-    free(manifest);
 
-    //remove(update); TODO: remove this as a comment
+    remove(update);
     free(update);
     free(conflict);
     close(sock);
