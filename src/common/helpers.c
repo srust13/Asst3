@@ -1,3 +1,7 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -149,15 +153,15 @@ void write_line(int fd, char *line){
 }
 
 void move_file(char *src, char *dst){
-    char *mv_cmd = malloc(strlen("mv ") + strlen(src) + strlen(" ") + strlen(dst) + 1);
-    sprintf(mv_cmd, "mv %s %s", src, dst);
+    char *mv_cmd;
+    asprintf(&mv_cmd, "mv %s %s", src, dst);
     system(mv_cmd);
     free(mv_cmd);
 }
 
 int file_exists_local(char *project, char *fname){
-    char *full_fname = malloc(strlen(project) + 1 + strlen(fname) + 1);
-    sprintf(full_fname, "%s/%s", project, fname);
+    char *full_fname;
+    asprintf(&full_fname, "%s/%s", project, fname);
     int found = access(full_fname, F_OK) != -1;
     free(full_fname);
     return found;
@@ -410,16 +414,13 @@ void send_directory(int sock, char *dirname){
     // create a tar file for given directory
     char tempfile[15+1];
     gen_temp_filename(tempfile);
-    char *create_tar_cmd = malloc(
-        strlen("tar -czf ") + strlen(tempfile) +
-        strlen(".tar.gz ./") + strlen(dirname) + 1
-    );
-    sprintf(create_tar_cmd, "tar -czf %s.tar.gz ./%s", dirname, dirname);
+    char *create_tar_cmd;
+    asprintf(&create_tar_cmd, "tar -czf %s.tar.gz ./%s", tempfile, dirname);
     system(create_tar_cmd);
 
     // send tar file to client
-    char *dir_tar_name = malloc(strlen(tempfile) + strlen(".tar.gz") + 1);
-    sprintf(dir_tar_name, "%s.tar.gz", dirname);
+    char *dir_tar_name;
+    asprintf(&dir_tar_name, "%s.tar.gz", tempfile);
     send_file(dir_tar_name, sock, 0);
 
     // cleanup
@@ -437,13 +438,13 @@ void recv_directory(int sock, char *dirname){
     // recieve the tar file
     char tempfile[15+1];
     gen_temp_filename(tempfile);
-    char *dir_tar_name = malloc(strlen(tempfile) + strlen(".tar.gz") + 1);
-    sprintf(dir_tar_name, "%s.tar.gz", tempfile);
+    char *dir_tar_name;
+    asprintf(&dir_tar_name, "%s.tar.gz", tempfile);
     recv_file(sock, dir_tar_name);
 
     // untar and unzip it here in repository
-    char *untar_cmd = malloc(strlen("tar -xzf ") + strlen(dir_tar_name) + 1);
-    sprintf(untar_cmd, "tar -xzf %s", dir_tar_name);
+    char *untar_cmd;
+    asprintf(&untar_cmd, "tar -xzf %s", dir_tar_name);
     system(untar_cmd);
 
     // clean up
@@ -647,16 +648,15 @@ char *set_create_project(int sock, int should_create){
         mkdir(project, 0755);
 
         // create local .Manifest file
-        char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
-        sprintf(manifest, "%s/.Manifest", project);
+        char *manifest;
+        asprintf(&manifest, "%s/.Manifest", project);
         int manifest_fd = open(manifest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         free(manifest);
 
         // write local .Manifest file
-        int manifest_size = strlen(project) + strlen("0 \n");
-        char *manifest_data = malloc(manifest_size + 1);
-        sprintf(manifest_data, "0 %s\n", project);
-        write(manifest_fd, manifest_data, manifest_size);
+        char *manifest_data;
+        asprintf(&manifest_data, "0 %s\n", project);
+        write(manifest_fd, manifest_data, strlen(manifest_data));
         close(manifest_fd);
         free(manifest_data);
     }
@@ -698,9 +698,8 @@ char *search_file_in_manifest(char *manifest, char *search){
  * The returned pointer must be freed.
  */
 char *generate_manifest_line(char code, char *hexdigest, int version, char *fname){
-    int out_buf_len = 1 + 1 + 32 + 1 + 10 + 1 + strlen(fname) + 1;
-    char *out_buf = malloc(out_buf_len+1);
-    sprintf(out_buf, "%c %s %d %s\n", code, hexdigest, version, fname);
+    char *out_buf;
+    asprintf(&out_buf, "%c %s %d %s\n", code, hexdigest, version, fname);
     return out_buf;
 }
 
@@ -733,8 +732,8 @@ void clean_manifest_line(manifest_line_t *ml){
 void add_to_manifest(char *project, char *filename){
 
     // open manifest
-    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
     init_file_buf(info, manifest);
 
@@ -802,8 +801,8 @@ void add_to_manifest(char *project, char *filename){
 void remove_from_manifest(char *project, char *filename){
 
     // open manifest
-    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
     init_file_buf(info, manifest);
 
@@ -1030,9 +1029,10 @@ char *generate_am_tar(char *commitPath) {
     }
 
     // create tar
-    char *tar_name = malloc(15 + strlen(".tar.gz") + 1);
-    gen_temp_filename(tar_name);
-    sprintf(tar_name, "%s.tar.gz", tar_name);
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    char *tar_name;
+    asprintf(&tar_name, "%s.tar.gz", tempfile);
 
     char *cmd = malloc(strlen("tar czf ") + strlen(tar_name) + cmd_length);
     sprintf(cmd, "tar czf %s", tar_name);
@@ -1117,10 +1117,11 @@ void regenerate_manifest(char *client_manifest, char *commit){
 
     // write the incremented project version to the temp file
     read_file_until(info, ' ');
-    char newVersion_buf[10];
-    sprintf(newVersion_buf, "%d", atoi(info->data) + 1);
+    char *newVersion_buf;
+    asprintf(&newVersion_buf, "%d", atoi(info->data) + 1);
     write(fout, newVersion_buf, strlen(newVersion_buf));
     write(fout, " ", 1);
+    free(newVersion_buf);
 
     // write the project name
     read_file_until(info, '\n');
@@ -1212,8 +1213,8 @@ char *commit_exists(char *project, char *client_hex){
             // if the file name starts with .Commit,
             // check that its hash is the same as client .Commit
             if (!strcmp(commitBuff, ".Commit")) {
-                char *buf = malloc(strlen(project) + 1 + strlen(de->d_name) + 1);
-                sprintf(buf, "%s/%s", project, de->d_name);
+                char *buf;
+                asprintf(&buf, "%s/%s", project, de->d_name);
                 md5sum(buf, hexstring);
 
                 // if hash is same, return file name
@@ -1239,30 +1240,21 @@ void remove_all_commits(char *project) {
     // open the project directory
     struct dirent *de;
     DIR *proj_dir = opendir(project);
-    char *commitBuff = calloc(8, sizeof(char));
-    int commitFile_length = 18;
-
-    char *rm_commit_path = malloc(strlen(project) + strlen("/") + commitFile_length + 1);
 
     // go through the files of the project directory
     while ((de = readdir(proj_dir)) != NULL) {
         // only read files with names longer than ".Commit" length
         if (strlen(de->d_name) >= 7) {
-            int i;
-            for (i = 0; i < 7; i++) {
-                commitBuff[i] = (de->d_name)[i];
-            }
-
             // delete all .Commit files
-            if (!strcmp(commitBuff, ".Commit")) {
-                sprintf(rm_commit_path, "%s/%s", project, de->d_name);
+            if (!strncmp(de->d_name, ".Commit", strlen(".Commit"))) {
+                char *rm_commit_path;
+                asprintf(&rm_commit_path, "%s/%s", project, de->d_name);
                 remove(rm_commit_path);
+                free(rm_commit_path);
             }
         }
     }
     closedir(proj_dir);
-    free(commitBuff);
-    free(rm_commit_path);
 }
 
 /**
@@ -1293,11 +1285,11 @@ void update_repo_from_commit(char *commit) {
 
         } else {
             // make backup
-            char *backup_fname = malloc(strlen("backups/") + strlen(ml->fname) + 1 + 10 + 1);
-            sprintf(backup_fname, "backups/%s_%d", ml->fname, ml->version);
+            char *backup_fname;
+            asprintf(&backup_fname, "backups/%s_%d", ml->fname, ml->version);
             mkpath(backup_fname);
-            char *cmd = malloc(strlen("tar -czf ") + strlen(backup_fname) + 1 + strlen(ml->fname) + 1);
-            sprintf(cmd, "tar -czf %s %s", backup_fname, ml->fname);
+            char *cmd;
+            asprintf(&cmd, "tar -czf %s %s", backup_fname, ml->fname);
             system(cmd);
             free(cmd);
             free(backup_fname);
@@ -1317,13 +1309,13 @@ void update_repo_from_commit(char *commit) {
  */
 void generate_update_conflict_files(char *project, char *client_manifest, char *server_manifest){
     // open .Update file to write to
-    char *update = malloc(strlen(project) + strlen("/.Update") + 1);
-    sprintf(update, "%s/.Update", project);
+    char *update;
+    asprintf(&update, "%s/.Update", project);
     int fout = open(update, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // open .Conflict file to write to
-    char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
-    sprintf(conflict, "%s/.Conflict", project);
+    char *conflict;
+    asprintf(&conflict, "%s/.Conflict", project);
     int fout_conflict = open(conflict, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // prepare server manifest for reading
@@ -1346,8 +1338,8 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
             char *entry_line = generate_manifest_line('A', ml_server->hexdigest, ml_server->version, ml_server->fname);
             write(fout, entry_line, strlen(entry_line));
 
-            char *a_fpath = malloc(strlen("A ") + strlen(ml_server->fname) + 1);
-            sprintf(a_fpath, "A %s", ml_server->fname);
+            char *a_fpath;
+            asprintf(&a_fpath, "A %s", ml_server->fname);
             puts(a_fpath);
             free(a_fpath);
             free(entry_line);
@@ -1378,8 +1370,8 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
             char *entry_line = generate_manifest_line('D', ml_client->hexdigest, ml_client->version, ml_client->fname);
             write(fout, entry_line, strlen(entry_line));
 
-            char *d_fpath = malloc(strlen("D ") + strlen(ml_client->fname) + 1);
-            sprintf(d_fpath, "D %s", ml_client->fname);
+            char *d_fpath;
+            asprintf(&d_fpath, "D %s", ml_client->fname);
             puts(d_fpath);
             free(d_fpath);
             free(entry_line);
@@ -1395,8 +1387,8 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                     char *entry_line = generate_manifest_line('M', ml_client->hexdigest, ml_client->version, ml_client->fname);
                     write(fout, entry_line, strlen(entry_line));
 
-                    char *m_fpath = malloc(strlen("M ") + strlen(ml_client->fname) + 1);
-                    sprintf(m_fpath, "M %s", ml_client->fname);
+                    char *m_fpath;
+                    asprintf(&m_fpath, "M %s", ml_client->fname);
                     puts(m_fpath);
                     free(m_fpath);
                     free(entry_line);
@@ -1405,8 +1397,8 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                     char *entry_line = generate_manifest_line('C', ml_client->hexdigest, ml_client->version, ml_client->fname);
                     write(fout_conflict, entry_line, strlen(entry_line));
 
-                    char *c_fpath = malloc(strlen("C ") + strlen(ml_client->fname) + 1);
-                    sprintf(c_fpath, "C %s", ml_client->fname);
+                    char *c_fpath;
+                    asprintf(&c_fpath, "C %s", ml_client->fname);
                     puts(c_fpath);
                     free(c_fpath);
                     free(entry_line);
@@ -1442,14 +1434,14 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
     mkdir(tempdir, 0755);
 
     // untar manifes to tempdir
-    char *cmd = malloc(strlen("tar -xzf ") + strlen(manifest) + strlen(" -C ") + strlen(tempdir) + 1);
-    sprintf(cmd, "tar -xzf %s -C %s", manifest, tempdir);
+    char *cmd;
+    asprintf(&cmd, "tar -xzf %s -C %s", manifest, tempdir);
     system(cmd);
     free(cmd);
 
     // get filename of manifest in tempdir
-    char *manifest_untarred = malloc(strlen(tempdir) + 1 + strlen(fname) + 1);
-    sprintf(manifest_untarred, "%s/%s", tempdir, fname);
+    char *manifest_untarred;
+    asprintf(&manifest_untarred, "%s/%s", tempdir, fname);
 
     // go line by line in manifest and find version 0 files
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
@@ -1475,11 +1467,11 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
         if (ml->version == 0 && !prev_existing){
             // this file was newly added in this manifest push;
             // delete all its backups
-            char *backup = malloc(strlen("backups/") + strlen(ml->fname) + 1 + 10 + 1);
             struct stat st = {0};
             int i = ml->version;
             for (;;i++){
-                sprintf(backup, "backups/%s_%d", ml->fname, i);
+                char *backup;
+                asprintf(&backup, "backups/%s_%d", ml->fname, i);
                 if (stat(backup, &st) != -1){
                     remove(backup);
 
@@ -1493,6 +1485,7 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
                 } else{
                     break;
                 }
+                free(backup);
             }
         }
         clean_manifest_line(ml);
@@ -1511,16 +1504,9 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
  * newly created files and delete their successors as well.
  */
 void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
-    // convert filename version to string
-    char fversion[10];
-    sprintf(fversion, "%d", version);
-
     // untar backup file to folder
-    char *backup = malloc(strlen("backups/") + strlen(fname) + 1 + 10 + 1);
-    sprintf(backup, "backups/%s_%s", fname, fversion);
-
-    char *cmd = malloc(strlen("tar -xzf ") + strlen(backup) + strlen(" -C ") + strlen(tempdir) + 1);
-    sprintf(cmd, "tar -xzf %s -C %s", backup, tempdir);
+    char *cmd;
+    asprintf(&cmd, "tar -xzf backups/%s_%d -C %s", fname, version, tempdir);
     system(cmd);
     free(cmd);
 
@@ -1529,8 +1515,8 @@ void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
     if (is_manifest){
 
         // get filename of manifest in tempdir
-        char *manifest_untarred = malloc(strlen(tempdir) + 1 + strlen(fname) + 1);
-        sprintf(manifest_untarred, "%s/%s", tempdir, fname);
+        char *manifest_untarred;
+        asprintf(&manifest_untarred, "%s/%s", tempdir, fname);
         file_buf_t *info = calloc(1, sizeof(file_buf_t));
         init_file_buf(info, manifest_untarred);
         free(manifest_untarred);
@@ -1549,34 +1535,32 @@ void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
                     cur->next = ml;
                     cur = ml;
                 }
-            } else {
+            } else
                 clean_manifest_line(ml);
-            }
         }
+        clean_file_buf(info);
     }
 
     // remove all older versions of file from backup
     struct stat st = {0};
     int i = version+1;
     for (;;i++){
-        sprintf(backup, "backups/%s_%d", fname, i);
+        char *backup;
+        asprintf(&backup, "backups/%s_%d", fname, i);
         if (stat(backup, &st) != -1){
-            if (is_manifest){
+            if (is_manifest)
                 remove_orphaned_files(backup, fname, head);
-            }
             remove(backup);
         } else{
             break;
         }
+        free(backup);
     }
-    free(backup);
 
-    if (is_manifest){
-        while (head){
-            manifest_line_t *temp = head->next;
-            clean_manifest_line(head);
-            head = temp;
-        }
+    while (head){
+        manifest_line_t *temp = head->next;
+        clean_manifest_line(head);
+        head = temp;
     }
 }
 
@@ -1594,10 +1578,11 @@ void rollback_every_file(char *project, char *version){
     mkdir(tempdir, 0755);
 
     // extract manifest to tempdir
-    char *manifest = malloc(strlen(tempdir) + 1 + strlen(project) + strlen("/.Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     rollback_file(manifest, atoi(version), tempdir, 1);
-    sprintf(manifest, "%s/%s/.Manifest", tempdir, project);
+    free(manifest);
+    asprintf(&manifest, "%s/%s/.Manifest", tempdir, project);
 
     // open and read manifest line-by-line
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
@@ -1613,16 +1598,15 @@ void rollback_every_file(char *project, char *version){
         clean_manifest_line(ml);
     }
     clean_file_buf(info);
-    free(version);
 
     // move tempdir to realdir
-    char *rm_old = malloc(strlen("rm -rf ") + strlen(project) + 1);
-    sprintf(rm_old, "rm -rf %s", project);
+    char *rm_old;
+    asprintf(&rm_old, "rm -rf %s", project);
     system(rm_old);
     free(rm_old);
 
-    char *mv_new = malloc(strlen("mv ") + strlen(tempdir) + 1 + strlen(project) + 1);
-    sprintf(mv_new, "mv %s/%s .", tempdir, project);
+    char *mv_new;
+    asprintf(&mv_new, "mv %s/%s .", tempdir, project);
     system(mv_new);
     free(mv_new);
 

@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,13 +15,12 @@ int sock;
 
 void configure(char *hostname, char *port){
     // create data
-    int buf_len = strlen(hostname) + strlen(port) + 2;
-    char *buf = malloc(buf_len + 1); // sprintf adds null terminator
-    sprintf(buf, "%s %s\n", hostname, port);
+    char *buf;
+    asprintf(&buf, "%s %s\n", hostname, port);
 
     // write data to file
     int fd = open(".configure", O_WRONLY | O_CREAT | O_TRUNC, 0666);
-    write(fd, buf, buf_len);
+    write(fd, buf, strlen(buf));
     close(fd);
     free(buf);
 }
@@ -57,8 +57,8 @@ void update(char *project){
         exit(EXIT_FAILURE);
     }
 
-    char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
-    sprintf(conflict, "%s/.Conflict", project);
+    char *conflict;
+    asprintf(&conflict, "%s/.Conflict", project);
 
     // retrieve server .Manifest and parse version
     char tempfile[15+1];
@@ -67,8 +67,8 @@ void update(char *project){
     int server_manifest_version = get_manifest_version(tempfile);
 
     // retrieve client .Manifest and parse version
-    char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     int client_manifest_version = get_manifest_version(manifest);
 
     // if client and server .Manifest versions are same: write blank .Update file and remove .Conflict
@@ -76,8 +76,8 @@ void update(char *project){
         puts("Client and server .Manifest versions match!");
         puts("Up to date.");
 
-        char *update = malloc(strlen(project) + strlen("/.Update") + 1);
-        sprintf(update, "%s/.Update", project);
+        char *update;
+        asprintf(&update, "%s/.Update", project);
         int fout = open(update, O_RDONLY | O_CREAT | O_TRUNC, 0644);
 
         free(update);
@@ -111,8 +111,8 @@ void upgrade(char *project){
 void commit(char *project){
 
     // check if client already has non-empty .Update file
-    char *update = malloc(strlen(project) + 1 + strlen(".Update") + 1);
-    sprintf(update, "%s/.Update", project);
+    char *update;
+    asprintf(&update, "%s/.Update", project);
     struct stat st = {0};
     if (stat(update, &st) && st.st_size > 0){
         puts("Project already has a .Update file!");
@@ -142,8 +142,8 @@ void commit(char *project){
     int server_manifest_version = get_manifest_version(tempfile);
 
     // retrieve client .Manifest and parse version
-    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     int client_manifest_version = get_manifest_version(manifest);
 
     // verify .Manifest versions are equal
@@ -158,8 +158,8 @@ void commit(char *project){
     }
 
     // create .Commit file
-    char *commit = malloc(strlen(project) + 1 + strlen(".Commit") + 1);
-    sprintf(commit, "%s/.Commit", project);
+    char *commit;
+    asprintf(&commit, "%s/.Commit", project);
     if (!generate_commit_file(commit, manifest, tempfile)){
         send_int(sock, 0);
         remove(commit);
@@ -208,8 +208,8 @@ void push(char *project){
     }
 
     // send local .Commit file md5sum to server and wait for acceptance
-    char *commitPath = malloc(strlen(project) + strlen("/.Commit") + 1);
-    sprintf(commitPath, "%s/.Commit", project);
+    char *commitPath;
+    asprintf(&commitPath, "%s/.Commit", project);
     char digest[32+1];
     md5sum(commitPath, digest);
     send_line(sock, digest);
@@ -222,8 +222,8 @@ void push(char *project){
         send_file(tar_name, sock, 0);
 
         // regenerate manifest file from .Commit
-        char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
-        sprintf(manifestPath, "%s/.Manifest", project);
+        char *manifestPath;
+        asprintf(&manifestPath, "%s/.Manifest", project);
         regenerate_manifest(manifestPath, commitPath);
 
         // send the manifest to the server

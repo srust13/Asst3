@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -14,8 +15,8 @@ void checkout(int sock, char *project){
 
 void update(int sock, char *project){
     // send manifest
-    char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     send_file(manifest, sock, 0);
     free(manifest);
 }
@@ -26,8 +27,8 @@ void upgrade(int sock, char *project){
 
 void commit(int sock, char *project){
     // send manifest
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     send_file(manifest, sock, 0);
     free(manifest);
 
@@ -68,15 +69,15 @@ void push(int sock, char *project){
     struct stat st = {0};
     stat(temp_tar, &st);
     if(st.st_size > 0){
-        char *untar_cmd = malloc(strlen("tar xzf ") + strlen(temp_tar) + 1);
-        sprintf(untar_cmd, "tar xzf %s", temp_tar);
+        char *untar_cmd;
+        asprintf(&untar_cmd, "tar xzf %s", temp_tar);
         system(untar_cmd);
         free(untar_cmd);
     }
 
     // replace old .Manifest with new updated .Manifest from client
-    char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
-    sprintf(manifestPath, "%s/.Manifest", project);
+    char *manifestPath;
+    asprintf(&manifestPath, "%s/.Manifest", project);
     recv_file(sock, manifestPath);
 
     // backup A/M files and remove D files
@@ -88,8 +89,8 @@ void push(int sock, char *project){
 
     // backup .Manifest
     int version = get_manifest_version(manifestPath);
-    char *cmd = malloc(strlen("tar -czf ") + strlen(manifestPath) + strlen("backups/") + strlen(manifestPath) + 1 + 10 + 1);
-    sprintf(cmd, "tar -czf backups/%s_%d %s", manifestPath, version, manifestPath);
+    char *cmd;
+    asprintf(&cmd, "tar -czf backups/%s_%d %s", manifestPath, version, manifestPath);
     system(cmd);
     free(cmd);
 
@@ -100,16 +101,16 @@ void push(int sock, char *project){
 
 void create(int sock, char *project){
     // backup manifest
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
 
-    char *backup_manifest = malloc(strlen("backups/") + strlen(manifest) + 1);
-    sprintf(backup_manifest, "backups/%s", manifest);
+    char *backup_manifest;
+    asprintf(&backup_manifest, "backups/%s", manifest);
     mkpath(backup_manifest);
     free(backup_manifest);
 
-    char *cmd = malloc(strlen("tar -czf ") + strlen(manifest) + strlen("backups/") + strlen(manifest) + 1 + 10 + 1);
-    sprintf(cmd, "tar -czf backups/%s_%d %s", manifest, 0, manifest);
+    char *cmd;
+    asprintf(&cmd, "tar -czf backups/%s_%d %s", manifest, 0, manifest);
     system(cmd);
     free(cmd);
 
@@ -119,16 +120,16 @@ void create(int sock, char *project){
 }
 
 void destroy(int sock, char *project){
-    char *cmd = malloc(strlen("rm -rf ") + strlen(project) + 1);
-    sprintf(cmd, "rm -rf %s", project);
+    char *cmd;
+    asprintf(&cmd, "rm -rf %s", project);
     system(cmd);
     free(cmd);
 }
 
 void currentversion(int sock, char *project){
     // send requested .Manifest to client
-    char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
-    sprintf(manifest, "%s/.Manifest", project);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
     send_file(manifest, sock, 0);
     free(manifest);
 }
@@ -141,17 +142,20 @@ void rollback(int sock, char *project){
     char *version = recv_line(sock);
 
     // check if project version exists
-    char *manifest_backup = malloc(
-        strlen("backups/") + strlen(project) + strlen("/.Manifest_") + strlen(version) + 1);
-    sprintf(manifest_backup, "backups/%s/.Manifest_%s", project, version);
+    char *manifest_backup;
+    asprintf(&manifest_backup, "backups/%s/.Manifest_%s", project, version);
     struct stat st = {0};
     int exists = stat(manifest_backup, &st) != -1;
     if (!exists){
+        free(version);
+        free(manifest_backup);
         send_int(sock, exists);
         return;
     }
     free(manifest_backup);
 
+    // execute rollback
     rollback_every_file(project, version);
+    free(version);
     send_int(sock, exists);
 }
