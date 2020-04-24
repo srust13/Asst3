@@ -16,7 +16,7 @@ echo "somethinnew" > huffman_dir/file2
 ../../bin/WTF upgrade huffman_dir
 
 # kill server
-kill -INT $pid &2>/dev/null
+kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
 exit 0

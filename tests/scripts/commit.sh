@@ -11,7 +11,7 @@ cd ../client
 ../../bin/WTF commit huffman_dir
 
 # kill server
-kill -INT $pid &2>/dev/null
+kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
 result="$(cat huffman_dir/.Commit)"

@@ -18,7 +18,7 @@ rm huffman_dir/file3
 
 # kill server
 sleep .1
-kill -INT $pid &2>/dev/null
+kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
 result="$(cat huffman_dir/.Manifest)"
