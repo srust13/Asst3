@@ -163,7 +163,7 @@ void history(int sock, char *project){
 
     struct stat st = {0};
     int i;
-    for (i = 0; i >= 0; i++){
+    for (i = 1; i >= 0; i++){
         char *backup;
         asprintf(&backup, "history/%s/.Commit_%d", project, i);
         if (stat(backup, &st) != -1){

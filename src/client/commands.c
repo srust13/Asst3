@@ -406,6 +406,7 @@ void history(char *project){
     file_buf_t *info = init_file_buf(tempfile);
 
     // go through the file and print output
+    puts("");
     while(1) {
         read_file_until(info, '\n');
         if (info->file_eof)

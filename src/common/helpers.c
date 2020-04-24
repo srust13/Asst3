@@ -1375,6 +1375,7 @@ void update_repo_from_commit(char *commit, char *project, int manifest_version_n
     mkpath(commit_backup);
     char *cmd;
     asprintf(&cmd, "cp %s %s", commit, commit_backup);
+    system(cmd);
     free(cmd);
     free(commit_backup);
 }
