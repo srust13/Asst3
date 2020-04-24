@@ -71,4 +71,4 @@ char *commit_exists(char *project, char *client_hex);
 
 void generate_update_conflict_files(char *project, char *client_manifest, char *server_manifest);
 
-void rollback_file(char *fname, int version, char *tempdir);
+void rollback_every_file(char *project, char *version);

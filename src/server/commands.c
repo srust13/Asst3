@@ -152,44 +152,6 @@ void rollback(int sock, char *project){
     }
     free(manifest_backup);
 
-    // create temp dir for extraction
-    char tempdir[15+1];
-    gen_temp_filename(tempdir);
-    mkdir(tempdir, 0755);
-
-    // extract manifest to tempdir
-    char *manifest = malloc(strlen(tempdir) + 1 + strlen(project) + strlen("/.Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
-    rollback_file(manifest, atoi(version), tempdir);
-    sprintf(manifest, "%s/%s/.Manifest", tempdir, project);
-
-    // open and read manifest line-by-line
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
-    read_file_until(info, '\n');
-
-    while (1){
-        read_file_until(info, '\n');
-        if (info->file_eof)
-            break;
-        manifest_line_t *ml = parse_manifest_line(info->data);
-        rollback_file(ml->fname, ml->version, tempdir);
-        clean_manifest_line(ml);
-    }
-    clean_file_buf(info);
-    free(version);
-
-    // move tempdir to realdir
-    char *rm_old = malloc(strlen("rm -rf ") + strlen(project) + 1);
-    sprintf(rm_old, "rm -rf %s", project);
-    system(rm_old);
-    free(rm_old);
-
-    char *mv_new = malloc(strlen("mv ") + strlen(tempdir) + 1 + strlen(project) + 1);
-    sprintf(mv_new, "mv %s/%s .", tempdir, project);
-    system(mv_new);
-    free(mv_new);
-
-    rmdir(tempdir);
+    rollback_every_file(project, version);
     send_int(sock, exists);
 }

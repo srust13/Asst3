@@ -14,6 +14,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <libgen.h>
 
 #include "helpers.h"
 
@@ -162,36 +163,18 @@ int file_exists_local(char *project, char *fname){
     return found;
 }
 
-/**
- * Extract backup file to tempdir. All newer versions of that
- * file in the backup directory are deleted.
- */
-void rollback_file(char *fname, int version, char *tempdir){
-    // convert filename version to string
-    char fversion[10];
-    sprintf(fversion, "%d", version);
-
-    // untar backup file to folder
-    char *backup = malloc(strlen("backups/") + strlen(fname) + 1 + 10 + 1);
-    sprintf(backup, "backups/%s_%s", fname, fversion);
-
-    char *cmd = malloc(strlen("tar -xzf ") + strlen(backup) + strlen(" -C ") + strlen(tempdir) + 1);
-    sprintf(cmd, "tar -xzf %s -C %s", backup, tempdir);
-    system(cmd);
-    free(cmd);
-
-    // remove all older versions of file from backup
-    struct stat st = {0};
-    int i = version+1;
-    for (;;i++){
-        sprintf(backup, "backups/%s_%d", fname, i);
-        if (stat(backup, &st) != -1){
-            remove(backup);
-        } else{
-            break;
-        }
-    }
-    free(backup);
+int empty_directory(char *dirname){
+  int n = 0;
+  struct dirent *d;
+  DIR *dir = opendir(dirname);
+  if (dir == NULL) // Not a directory or doesn't exist
+    return 1;
+  while ((d = readdir(dir)) != NULL) {
+    if(++n > 2)
+      break;
+  }
+  closedir(dir);
+  return n <= 2; // Directory Empty
 }
 
 void init_file_buf(file_buf_t *info, char *filename) {
@@ -1300,6 +1283,14 @@ void update_repo_from_commit(char *commit) {
         // remove all "D" files
         if (ml->code == 'D'){
             remove(ml->fname);
+
+            char *copy = strdup(ml->fname);
+            char *dir = dirname(copy);
+            if (empty_directory(dir)){
+                rmdir(dir);
+            }
+            free(copy);
+
         } else {
             // make backup
             char *backup_fname = malloc(strlen("backups/") + strlen(ml->fname) + 1 + 10 + 1);
@@ -1433,4 +1424,207 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
     close(fout);
     close(fout_conflict);
     clean_file_buf(info);
+}
+
+/**********************************************************************************
+                                  ROLLBACK HELPERS
+***********************************************************************************/
+
+/**
+ * Removes all orphaned filenames in the backup directory
+ * that were created in the specified manifest.
+ */
+void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existing_zeros){
+
+    // create tempdir
+    char tempdir[15+1];
+    gen_temp_filename(tempdir);
+    mkdir(tempdir, 0755);
+
+    // untar manifes to tempdir
+    char *cmd = malloc(strlen("tar -xzf ") + strlen(manifest) + strlen(" -C ") + strlen(tempdir) + 1);
+    sprintf(cmd, "tar -xzf %s -C %s", manifest, tempdir);
+    system(cmd);
+    free(cmd);
+
+    // get filename of manifest in tempdir
+    char *manifest_untarred = malloc(strlen(tempdir) + 1 + strlen(fname) + 1);
+    sprintf(manifest_untarred, "%s/%s", tempdir, fname);
+
+    // go line by line in manifest and find version 0 files
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest_untarred);
+    read_file_until(info, '\n');
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml = parse_manifest_line(info->data);
+
+        // make sure it wasn't already version 0 prior to this manifest
+        int prev_existing = 0;
+        manifest_line_t *temp = existing_zeros;
+        while (temp){
+            if (!strcmp(temp->fname, ml->fname)){
+                prev_existing = 1;
+                break;
+            }
+            temp = temp->next;
+        }
+
+        if (ml->version == 0 && !prev_existing){
+            // this file was newly added in this manifest push;
+            // delete all its backups
+            char *backup = malloc(strlen("backups/") + strlen(ml->fname) + 1 + 10 + 1);
+            struct stat st = {0};
+            int i = ml->version;
+            for (;;i++){
+                sprintf(backup, "backups/%s_%d", ml->fname, i);
+                if (stat(backup, &st) != -1){
+                    remove(backup);
+
+                    // remove empty directories
+                    char *copy = strdup(backup);
+                    char *dir = dirname(copy);
+                    if (empty_directory(dir)){
+                        rmdir(dir);
+                    }
+                    free(copy);
+                } else{
+                    break;
+                }
+            }
+        }
+        clean_manifest_line(ml);
+    }
+    clean_file_buf(info);
+    remove(manifest_untarred);
+    free(manifest_untarred);
+    rmdir(tempdir);
+}
+
+/**
+ * Extract backup file to tempdir. All newer versions of that
+ * file in the backup directory are deleted.
+ *
+ * If it's a manifest file, we will parse newer manifests to find
+ * newly created files and delete their successors as well.
+ */
+void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
+    // convert filename version to string
+    char fversion[10];
+    sprintf(fversion, "%d", version);
+
+    // untar backup file to folder
+    char *backup = malloc(strlen("backups/") + strlen(fname) + 1 + 10 + 1);
+    sprintf(backup, "backups/%s_%s", fname, fversion);
+
+    char *cmd = malloc(strlen("tar -xzf ") + strlen(backup) + strlen(" -C ") + strlen(tempdir) + 1);
+    sprintf(cmd, "tar -xzf %s -C %s", backup, tempdir);
+    system(cmd);
+    free(cmd);
+
+    // make list of filenames that were already version 0 in the current manifest
+    manifest_line_t *head = NULL;
+    if (is_manifest){
+
+        // get filename of manifest in tempdir
+        char *manifest_untarred = malloc(strlen(tempdir) + 1 + strlen(fname) + 1);
+        sprintf(manifest_untarred, "%s/%s", tempdir, fname);
+        file_buf_t *info = calloc(1, sizeof(file_buf_t));
+        init_file_buf(info, manifest_untarred);
+        free(manifest_untarred);
+
+        manifest_line_t *cur;
+        while (1){
+            read_file_until(info, '\n');
+            if (info->file_eof)
+                break;
+            manifest_line_t *ml = parse_manifest_line(info->data);
+            if (ml->version == 0){
+                if (!head){
+                    head = ml;
+                    cur = ml;
+                } else {
+                    cur->next = ml;
+                    cur = ml;
+                }
+            } else {
+                clean_manifest_line(ml);
+            }
+        }
+    }
+
+    // remove all older versions of file from backup
+    struct stat st = {0};
+    int i = version+1;
+    for (;;i++){
+        sprintf(backup, "backups/%s_%d", fname, i);
+        if (stat(backup, &st) != -1){
+            if (is_manifest){
+                remove_orphaned_files(backup, fname, head);
+            }
+            remove(backup);
+        } else{
+            break;
+        }
+    }
+    free(backup);
+
+    if (is_manifest){
+        while (head){
+            manifest_line_t *temp = head->next;
+            clean_manifest_line(head);
+            head = temp;
+        }
+    }
+}
+
+/**
+ * Creates a directory in /tmp. Extracts the desired version
+ * manifest file into it. Then, for each file in the manifest,
+ * extracts the backup file into the /tmp directory and removes
+ * newer versions of it. Finally, replaces the existing project
+ * with the directory created in /tmp.
+ */
+void rollback_every_file(char *project, char *version){
+    // create temp dir for extraction
+    char tempdir[15+1];
+    gen_temp_filename(tempdir);
+    mkdir(tempdir, 0755);
+
+    // extract manifest to tempdir
+    char *manifest = malloc(strlen(tempdir) + 1 + strlen(project) + strlen("/.Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
+    rollback_file(manifest, atoi(version), tempdir, 1);
+    sprintf(manifest, "%s/%s/.Manifest", tempdir, project);
+
+    // open and read manifest line-by-line
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
+    init_file_buf(info, manifest);
+    read_file_until(info, '\n');
+
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml = parse_manifest_line(info->data);
+        rollback_file(ml->fname, ml->version, tempdir, 0);
+        clean_manifest_line(ml);
+    }
+    clean_file_buf(info);
+    free(version);
+
+    // move tempdir to realdir
+    char *rm_old = malloc(strlen("rm -rf ") + strlen(project) + 1);
+    sprintf(rm_old, "rm -rf %s", project);
+    system(rm_old);
+    free(rm_old);
+
+    char *mv_new = malloc(strlen("mv ") + strlen(tempdir) + 1 + strlen(project) + 1);
+    sprintf(mv_new, "mv %s/%s .", tempdir, project);
+    system(mv_new);
+    free(mv_new);
+
+    rmdir(tempdir);
 }
