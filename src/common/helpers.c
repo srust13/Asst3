@@ -1176,7 +1176,6 @@ int get_manifest_version(char *manifest){
     return manifest_version;
 }
 
-
 /**
  * After pushing, recreate the Manifest file with
  * <code> = "-" on client to files using .Update
@@ -1190,8 +1189,7 @@ void regenerate_manifest_from_update(char *manifest, char *update){
     manifest_line_t *mod_lines = modified_files_from_commit(update);
 
     // read from client manifest
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
 
     // open tempfile to write new manifest to
     char tempfile[15+1];
@@ -1243,8 +1241,7 @@ void regenerate_manifest_from_update(char *manifest, char *update){
 
     // prepare to read update file
     clean_file_buf(info);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, update);
+    info = init_file_buf(update);
 
     // go through the lines of update
     while(1) {
@@ -1294,8 +1291,7 @@ void remove_dFiles_from_manifest(char *manifest, char *update, int server_manife
 
     // prepare manifest for reading
     clean_file_buf(info);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    info = init_file_buf(manifest);
 
     // open tempfile to write new manifest to
     char tempfile[15+1];

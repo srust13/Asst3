@@ -292,7 +292,7 @@ void push(char *project){
         // regenerate manifest file from .Commit
         char *manifestPath;
         asprintf(&manifestPath, "%s/.Manifest", project);
-        regenerate_manifest(manifestPath, commitPath);
+        regenerate_manifest_from_commit(manifestPath, commitPath);
 
         // send the manifest to the server
         send_file(manifestPath, sock, 0);
