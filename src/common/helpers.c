@@ -565,8 +565,7 @@ void init_socket_server(int *sock, char *command){
 
     // read hostname
     read_file_until(info, ' ');
-    char *hostname = malloc(strlen(info->data)+1);
-    strcpy(hostname, info->data);
+    char *hostname = strdup(info->data);
 
     // read port
     read_file_until(info, '\n');
@@ -708,7 +707,7 @@ char *generate_manifest_line(char code, char *hexdigest, int version, char *fnam
  */
 manifest_line_t *parse_manifest_line(char *line){
     manifest_line_t *ml = calloc(1, sizeof(manifest_line_t));
-    ml->fname = malloc(strlen(line)+1);
+    ml->fname = calloc(1, strlen(line)+1);
     sscanf(line, "%c %s %d %s", &(ml->code), ml->hexdigest, &(ml->version), ml->fname);
     return ml;
 }
@@ -1414,7 +1413,11 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
 
 /**
  * Removes all orphaned filenames in the backup directory
- * that were created in the specified manifest.
+ * that were created in the specified manifest. Orphaned filenames
+ * are files that have version 0 and did not exist in a previous manifest
+ * - indicating that they were created by a future manifest.
+ * They will never get used again since this manifest will get deleted
+ * during the rollback.
  */
 void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existing_zeros){
 
@@ -1423,18 +1426,18 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
     gen_temp_filename(tempdir);
     mkdir(tempdir, 0755);
 
-    // untar manifes to tempdir
+    // untar manifest to tempdir
     char *cmd;
     asprintf(&cmd, "tar -xzf %s -C %s", manifest, tempdir);
     system(cmd);
     free(cmd);
 
-    // get filename of manifest in tempdir
+    // open untarred manifest in tempdir
     char *manifest_untarred;
     asprintf(&manifest_untarred, "%s/%s", tempdir, fname);
+    file_buf_t *info = init_file_buf(manifest_untarred);
 
     // go line by line in manifest and find version 0 files
-    file_buf_t *info = init_file_buf(manifest_untarred);
     read_file_until(info, '\n');
     while (1){
         read_file_until(info, '\n');
@@ -1457,8 +1460,8 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
             // this file was newly added in this manifest push;
             // delete all its backups
             struct stat st = {0};
-            int i = ml->version;
-            for (;;i++){
+            int i;
+            for (i = ml->version; i >= 0; i++){
                 char *backup;
                 asprintf(&backup, "backups/%s_%d", ml->fname, i);
                 if (stat(backup, &st) != -1){
@@ -1467,13 +1470,11 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
                     // remove empty directories
                     char *copy = strdup(backup);
                     char *dir = dirname(copy);
-                    if (empty_directory(dir)){
+                    if (empty_directory(dir))
                         rmdir(dir);
-                    }
                     free(copy);
-                } else{
-                    break;
-                }
+                } else
+                    i = -10; // done
                 free(backup);
             }
         }
@@ -1490,9 +1491,10 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
  * file in the backup directory are deleted.
  *
  * If it's a manifest file, we will parse newer manifests to find
- * newly created files and delete their successors as well.
+ * newly created files and delete their successor backups as well.
  */
 void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
+
     // untar backup file to folder
     char *cmd;
     asprintf(&cmd, "tar -xzf backups/%s_%d -C %s", fname, version, tempdir);
@@ -1500,6 +1502,8 @@ void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
     free(cmd);
 
     // make list of filenames that were already version 0 in the current manifest
+    // we should not assume these files were created by future manifest files
+    // and therefore should not remove them from the backups
     manifest_line_t *head = NULL;
     if (is_manifest){
 
@@ -1529,19 +1533,18 @@ void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
         clean_file_buf(info);
     }
 
-    // remove all older versions of file from backup
+    // remove all newer versions of file from backup
     struct stat st = {0};
-    int i = version+1;
-    for (;;i++){
+    int i;
+    for (i = version+1; i >= 0; i++){
         char *backup;
         asprintf(&backup, "backups/%s_%d", fname, i);
         if (stat(backup, &st) != -1){
             if (is_manifest)
                 remove_orphaned_files(backup, fname, head);
             remove(backup);
-        } else{
-            break;
-        }
+        } else
+            i = -10; // done
         free(backup);
     }
 
@@ -1556,8 +1559,12 @@ void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
  * Creates a directory in /tmp. Extracts the desired version
  * manifest file into it. Then, for each file in the manifest,
  * extracts the backup file into the /tmp directory and removes
- * newer versions of it. Finally, replaces the existing project
- * with the directory created in /tmp.
+ * newer versions of the file from the backup since we're reverting.
+ * Finally, replaces the existing project with the directory created
+ * in /tmp.
+ *
+ * Note: Future version manifests are also parsed to remove any orphaned
+ * backup files.
  */
 void rollback_every_file(char *project, char *version){
     // create temp dir for extraction
@@ -1570,12 +1577,14 @@ void rollback_every_file(char *project, char *version){
     asprintf(&manifest, "%s/.Manifest", project);
     rollback_file(manifest, atoi(version), tempdir, 1);
     free(manifest);
+
+    // open untarred manifest
     asprintf(&manifest, "%s/%s/.Manifest", tempdir, project);
-
-    // open and read manifest line-by-line
     file_buf_t *info = init_file_buf(manifest);
-    read_file_until(info, '\n');
+    free(manifest);
 
+    // read manifest line-by-line
+    read_file_until(info, '\n');
     while (1){
         read_file_until(info, '\n');
         if (info->file_eof)
