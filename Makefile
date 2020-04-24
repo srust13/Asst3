@@ -76,7 +76,11 @@ rollback: push
 	@(./tests/scripts/rollback.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC} rollback) || echo ${RED}FAIL${NC} rollback
 
-run: currentversion destroy upgrade rollback
+history: upgrade
+	@(./tests/scripts/history.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC} history) || echo ${RED}FAIL${NC} history
+
+run: currentversion destroy rollback history
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure tests_out/client2
