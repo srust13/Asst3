@@ -1,3 +1,7 @@
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,6 +18,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <libgen.h>
 
 #include "helpers.h"
 
@@ -148,25 +153,41 @@ void write_line(int fd, char *line){
 }
 
 void move_file(char *src, char *dst){
-    char *mv_cmd = malloc(strlen("mv ") + strlen(src) + strlen(" ") + strlen(dst) + 1);
-    sprintf(mv_cmd, "mv %s %s", src, dst);
+    char *mv_cmd;
+    asprintf(&mv_cmd, "mv %s %s", src, dst);
     system(mv_cmd);
     free(mv_cmd);
 }
 
 int file_exists_local(char *project, char *fname){
-    char *full_fname = malloc(strlen(project) + 1 + strlen(fname) + 1);
-    sprintf(full_fname, "%s/%s", project, fname);
+    char *full_fname;
+    asprintf(&full_fname, "%s/%s", project, fname);
     int found = access(full_fname, F_OK) != -1;
     free(full_fname);
     return found;
 }
 
-void init_file_buf(file_buf_t *info, char *filename) {
+int empty_directory(char *dirname){
+  int n = 0;
+  struct dirent *d;
+  DIR *dir = opendir(dirname);
+  if (dir == NULL) // Not a directory or doesn't exist
+    return 1;
+  while ((d = readdir(dir)) != NULL) {
+    if(++n > 2)
+      break;
+  }
+  closedir(dir);
+  return n <= 2; // Directory Empty
+}
+
+file_buf_t *init_file_buf(char *filename) {
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
     info->fd = open(filename, O_RDONLY);
     info->data = malloc(CHUNK_SIZE);
     info->remaining = malloc(CHUNK_SIZE);
     info->data_buf_size = CHUNK_SIZE;
+    return info;
 }
 
 void clean_file_buf(file_buf_t *info){
@@ -305,9 +326,6 @@ void mkpath(char* file_path) {
  * Send file over socket and wait for ACK.
  */
 void send_file(char *filename, int sock, int send_filename){
-    // check if file exists
-    struct stat st = {0};
-    int exists = stat(filename, &st) != -1;
 
     // send filename if we should
     send_int(sock, send_filename);
@@ -316,6 +334,8 @@ void send_file(char *filename, int sock, int send_filename){
     }
 
     // send file size
+    struct stat st = {0};
+    int exists = stat(filename, &st) != -1;
     send_int(sock, st.st_size);
 
     if(exists){
@@ -396,16 +416,13 @@ void send_directory(int sock, char *dirname){
     // create a tar file for given directory
     char tempfile[15+1];
     gen_temp_filename(tempfile);
-    char *create_tar_cmd = malloc(
-        strlen("tar -czf ") + strlen(tempfile) +
-        strlen(".tar.gz ./") + strlen(dirname) + 1
-    );
-    sprintf(create_tar_cmd, "tar -czf %s.tar.gz ./%s", dirname, dirname);
+    char *create_tar_cmd;
+    asprintf(&create_tar_cmd, "tar -czf %s.tar.gz ./%s", tempfile, dirname);
     system(create_tar_cmd);
 
     // send tar file to client
-    char *dir_tar_name = malloc(strlen(tempfile) + strlen(".tar.gz") + 1);
-    sprintf(dir_tar_name, "%s.tar.gz", dirname);
+    char *dir_tar_name;
+    asprintf(&dir_tar_name, "%s.tar.gz", tempfile);
     send_file(dir_tar_name, sock, 0);
 
     // cleanup
@@ -423,13 +440,13 @@ void recv_directory(int sock, char *dirname){
     // recieve the tar file
     char tempfile[15+1];
     gen_temp_filename(tempfile);
-    char *dir_tar_name = malloc(strlen(tempfile) + strlen(".tar.gz") + 1);
-    sprintf(dir_tar_name, "%s.tar.gz", tempfile);
+    char *dir_tar_name;
+    asprintf(&dir_tar_name, "%s.tar.gz", tempfile);
     recv_file(sock, dir_tar_name);
 
     // untar and unzip it here in repository
-    char *untar_cmd = malloc(strlen("tar -xzf ") + strlen(dir_tar_name) + 1);
-    sprintf(untar_cmd, "tar -xzf %s", dir_tar_name);
+    char *untar_cmd;
+    asprintf(&untar_cmd, "tar -xzf %s", dir_tar_name);
     system(untar_cmd);
 
     // clean up
@@ -544,13 +561,11 @@ void init_socket_server(int *sock, char *command){
     }
 
     // read data from file
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, ".configure");
+    file_buf_t *info = init_file_buf(".configure");
 
     // read hostname
     read_file_until(info, ' ');
-    char *hostname = malloc(strlen(info->data)+1);
-    strcpy(hostname, info->data);
+    char *hostname = strdup(info->data);
 
     // read port
     read_file_until(info, '\n');
@@ -633,16 +648,15 @@ char *set_create_project(int sock, int should_create){
         mkdir(project, 0755);
 
         // create local .Manifest file
-        char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
-        sprintf(manifest, "%s/.Manifest", project);
+        char *manifest;
+        asprintf(&manifest, "%s/.Manifest", project);
         int manifest_fd = open(manifest, O_WRONLY | O_CREAT | O_TRUNC, 0644);
         free(manifest);
 
         // write local .Manifest file
-        int manifest_size = strlen(project) + strlen("0 \n");
-        char *manifest_data = malloc(manifest_size + 1);
-        sprintf(manifest_data, "0 %s\n", project);
-        write(manifest_fd, manifest_data, manifest_size);
+        char *manifest_data;
+        asprintf(&manifest_data, "0 %s\n", project);
+        write(manifest_fd, manifest_data, strlen(manifest_data));
         close(manifest_fd);
         free(manifest_data);
     }
@@ -662,8 +676,7 @@ char *set_create_project(int sock, int should_create){
 char *search_file_in_manifest(char *manifest, char *search){
 
     // search for filename in each line of manifest
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
     while (1){
         read_file_until(info, '\n');
         if (info->file_eof)
@@ -684,9 +697,8 @@ char *search_file_in_manifest(char *manifest, char *search){
  * The returned pointer must be freed.
  */
 char *generate_manifest_line(char code, char *hexdigest, int version, char *fname){
-    int out_buf_len = 1 + 1 + 32 + 1 + 10 + 1 + strlen(fname) + 1;
-    char *out_buf = malloc(out_buf_len+1);
-    sprintf(out_buf, "%c %s %d %s\n", code, hexdigest, version, fname);
+    char *out_buf;
+    asprintf(&out_buf, "%c %s %d %s\n", code, hexdigest, version, fname);
     return out_buf;
 }
 
@@ -695,7 +707,7 @@ char *generate_manifest_line(char code, char *hexdigest, int version, char *fnam
  */
 manifest_line_t *parse_manifest_line(char *line){
     manifest_line_t *ml = calloc(1, sizeof(manifest_line_t));
-    ml->fname = malloc(strlen(line)+1);
+    ml->fname = calloc(1, strlen(line)+1);
     sscanf(line, "%c %s %d %s", &(ml->code), ml->hexdigest, &(ml->version), ml->fname);
     return ml;
 }
@@ -719,10 +731,9 @@ void clean_manifest_line(manifest_line_t *ml){
 void add_to_manifest(char *project, char *filename){
 
     // open manifest
-    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    file_buf_t *info = init_file_buf(manifest);
 
     // open temp filename - strlen("/tmp/1234567890") = 15
     char tempfile[15+1];
@@ -788,10 +799,9 @@ void add_to_manifest(char *project, char *filename){
 void remove_from_manifest(char *project, char *filename){
 
     // open manifest
-    char *manifest = malloc(strlen(project) + 1 + strlen(".Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    file_buf_t *info = init_file_buf(manifest);
 
     // open temp filename - strlen("/tmp/1234567890") = 15
     char tempfile[15+1];
@@ -857,8 +867,7 @@ void remove_from_manifest(char *project, char *filename){
 int generate_commit_file(char *commit, char *client_manifest, char *server_manifest){
 
     // prepare local manifest for reading
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, client_manifest);
+    file_buf_t *info = init_file_buf(client_manifest);
 
     // open temp file for writing new manifest
     char tempfile[15+1];
@@ -994,8 +1003,7 @@ char *generate_am_tar(char *commitPath) {
     int cmd_length = 0;
 
     // get list of files to tar from commit file's "A" or "M" codes
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, commitPath);
+    file_buf_t *info = init_file_buf(commitPath);
 
     while (1){
         read_file_until(info, '\n');
@@ -1016,9 +1024,10 @@ char *generate_am_tar(char *commitPath) {
     }
 
     // create tar
-    char *tar_name = malloc(15 + strlen(".tar.gz") + 1);
-    gen_temp_filename(tar_name);
-    sprintf(tar_name, "%s.tar.gz", tar_name);
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    char *tar_name;
+    asprintf(&tar_name, "%s.tar.gz", tempfile);
 
     char *cmd = malloc(strlen("tar czf ") + strlen(tar_name) + cmd_length);
     sprintf(cmd, "tar czf %s", tar_name);
@@ -1057,8 +1066,7 @@ manifest_line_t *modified_files_from_commit(char *commit){
     manifest_line_t *cur = NULL;
 
     // read from commit line by line
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, commit);
+    file_buf_t *info = init_file_buf(commit);
     while (1){
         read_file_until(info, '\n');
         if (info->file_eof)
@@ -1093,8 +1101,7 @@ void regenerate_manifest(char *client_manifest, char *commit){
     manifest_line_t *mod_lines = modified_files_from_commit(commit);
 
     // read from client manifest
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, client_manifest);
+    file_buf_t *info = init_file_buf(client_manifest);
 
     // open tempfile to write new manifest to
     char tempfile[15+1];
@@ -1103,10 +1110,11 @@ void regenerate_manifest(char *client_manifest, char *commit){
 
     // write the incremented project version to the temp file
     read_file_until(info, ' ');
-    char newVersion_buf[10];
-    sprintf(newVersion_buf, "%d", atoi(info->data) + 1);
+    char *newVersion_buf;
+    asprintf(&newVersion_buf, "%d", atoi(info->data) + 1);
     write(fout, newVersion_buf, strlen(newVersion_buf));
     write(fout, " ", 1);
+    free(newVersion_buf);
 
     // write the project name
     read_file_until(info, '\n');
@@ -1161,8 +1169,7 @@ void regenerate_manifest(char *client_manifest, char *commit){
  * Returns the version number of a manifest
  */
 int get_manifest_version(char *manifest){
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
     read_file_until(info, ' ');
     int manifest_version = atoi(info->data);
     clean_file_buf(info);
@@ -1198,8 +1205,8 @@ char *commit_exists(char *project, char *client_hex){
             // if the file name starts with .Commit,
             // check that its hash is the same as client .Commit
             if (!strcmp(commitBuff, ".Commit")) {
-                char *buf = malloc(strlen(project) + 1 + strlen(de->d_name) + 1);
-                sprintf(buf, "%s/%s", project, de->d_name);
+                char *buf;
+                asprintf(&buf, "%s/%s", project, de->d_name);
                 md5sum(buf, hexstring);
 
                 // if hash is same, return file name
@@ -1225,39 +1232,30 @@ void remove_all_commits(char *project) {
     // open the project directory
     struct dirent *de;
     DIR *proj_dir = opendir(project);
-    char *commitBuff = calloc(8, sizeof(char));
-    int commitFile_length = 18;
-
-    char *rm_commit_path = malloc(strlen(project) + strlen("/") + commitFile_length + 1);
 
     // go through the files of the project directory
     while ((de = readdir(proj_dir)) != NULL) {
         // only read files with names longer than ".Commit" length
         if (strlen(de->d_name) >= 7) {
-            int i;
-            for (i = 0; i < 7; i++) {
-                commitBuff[i] = (de->d_name)[i];
-            }
-
             // delete all .Commit files
-            if (!strcmp(commitBuff, ".Commit")) {
-                sprintf(rm_commit_path, "%s/%s", project, de->d_name);
+            if (!strncmp(de->d_name, ".Commit", strlen(".Commit"))) {
+                char *rm_commit_path;
+                asprintf(&rm_commit_path, "%s/%s", project, de->d_name);
                 remove(rm_commit_path);
+                free(rm_commit_path);
             }
         }
     }
     closedir(proj_dir);
-    free(commitBuff);
-    free(rm_commit_path);
 }
 
 /**
  * Remove all files marked "D" in .Commit
+ * Backup all files marked "A" and "M".
  */
-void removeAll_dFiles(char *commit) {
+void update_repo_from_commit(char *commit) {
     // read from commit file
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, commit);
+    file_buf_t *info = init_file_buf(commit);
 
     while (1){
         read_file_until(info, '\n');
@@ -1268,6 +1266,24 @@ void removeAll_dFiles(char *commit) {
         // remove all "D" files
         if (ml->code == 'D'){
             remove(ml->fname);
+
+            char *copy = strdup(ml->fname);
+            char *dir = dirname(copy);
+            if (empty_directory(dir)){
+                rmdir(dir);
+            }
+            free(copy);
+
+        } else {
+            // make backup
+            char *backup_fname;
+            asprintf(&backup_fname, "backups/%s_%d", ml->fname, ml->version);
+            mkpath(backup_fname);
+            char *cmd;
+            asprintf(&cmd, "tar -czf %s %s", backup_fname, ml->fname);
+            system(cmd);
+            free(cmd);
+            free(backup_fname);
         }
         clean_manifest_line(ml);
     }
@@ -1284,18 +1300,17 @@ void removeAll_dFiles(char *commit) {
  */
 void generate_update_conflict_files(char *project, char *client_manifest, char *server_manifest){
     // open .Update file to write to
-    char *update = malloc(strlen(project) + strlen("/.Update") + 1);
-    sprintf(update, "%s/.Update", project);
+    char *update;
+    asprintf(&update, "%s/.Update", project);
     int fout = open(update, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // open .Conflict file to write to
-    char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
-    sprintf(conflict, "%s/.Conflict", project);
+    char *conflict;
+    asprintf(&conflict, "%s/.Conflict", project);
     int fout_conflict = open(conflict, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // prepare server manifest for reading
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, server_manifest);
+    file_buf_t *info = init_file_buf(server_manifest);
 
     // skip first line of manifest
     read_file_until(info, '\n');
@@ -1313,8 +1328,8 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
             char *entry_line = generate_manifest_line('A', ml_server->hexdigest, ml_server->version, ml_server->fname);
             write(fout, entry_line, strlen(entry_line));
 
-            char *a_fpath = malloc(strlen("A ") + strlen(ml_server->fname) + 1);
-            sprintf(a_fpath, "A %s", ml_server->fname);
+            char *a_fpath;
+            asprintf(&a_fpath, "A %s", ml_server->fname);
             puts(a_fpath);
             free(a_fpath);
             free(entry_line);
@@ -1325,8 +1340,7 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
 
     // prepare client manifest for reading
     clean_file_buf(info);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, client_manifest);
+    info = init_file_buf(client_manifest);
 
     // skip first line of manifest
     read_file_until(info, ' ');
@@ -1345,8 +1359,8 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
             char *entry_line = generate_manifest_line('D', ml_client->hexdigest, ml_client->version, ml_client->fname);
             write(fout, entry_line, strlen(entry_line));
 
-            char *d_fpath = malloc(strlen("D ") + strlen(ml_client->fname) + 1);
-            sprintf(d_fpath, "D %s", ml_client->fname);
+            char *d_fpath;
+            asprintf(&d_fpath, "D %s", ml_client->fname);
             puts(d_fpath);
             free(d_fpath);
             free(entry_line);
@@ -1362,8 +1376,8 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                     char *entry_line = generate_manifest_line('M', ml_client->hexdigest, ml_client->version, ml_client->fname);
                     write(fout, entry_line, strlen(entry_line));
 
-                    char *m_fpath = malloc(strlen("M ") + strlen(ml_client->fname) + 1);
-                    sprintf(m_fpath, "M %s", ml_client->fname);
+                    char *m_fpath;
+                    asprintf(&m_fpath, "M %s", ml_client->fname);
                     puts(m_fpath);
                     free(m_fpath);
                     free(entry_line);
@@ -1372,8 +1386,8 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                     char *entry_line = generate_manifest_line('C', ml_client->hexdigest, ml_client->version, ml_client->fname);
                     write(fout_conflict, entry_line, strlen(entry_line));
 
-                    char *c_fpath = malloc(strlen("C ") + strlen(ml_client->fname) + 1);
-                    sprintf(c_fpath, "C %s", ml_client->fname);
+                    char *c_fpath;
+                    asprintf(&c_fpath, "C %s", ml_client->fname);
                     puts(c_fpath);
                     free(c_fpath);
                     free(entry_line);
@@ -1391,4 +1405,206 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
     close(fout);
     close(fout_conflict);
     clean_file_buf(info);
+}
+
+/**********************************************************************************
+                                  ROLLBACK HELPERS
+***********************************************************************************/
+
+/**
+ * Removes all orphaned filenames in the backup directory
+ * that were created in the specified manifest. Orphaned filenames
+ * are files that have version 0 and did not exist in a previous manifest
+ * - indicating that they were created by a future manifest.
+ * They will never get used again since this manifest will get deleted
+ * during the rollback.
+ */
+void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existing_zeros){
+
+    // create tempdir
+    char tempdir[15+1];
+    gen_temp_filename(tempdir);
+    mkdir(tempdir, 0755);
+
+    // untar manifest to tempdir
+    char *cmd;
+    asprintf(&cmd, "tar -xzf %s -C %s", manifest, tempdir);
+    system(cmd);
+    free(cmd);
+
+    // open untarred manifest in tempdir
+    char *manifest_untarred;
+    asprintf(&manifest_untarred, "%s/%s", tempdir, fname);
+    file_buf_t *info = init_file_buf(manifest_untarred);
+
+    // go line by line in manifest and find version 0 files
+    read_file_until(info, '\n');
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml = parse_manifest_line(info->data);
+
+        // make sure it wasn't already version 0 prior to this manifest
+        int prev_existing = 0;
+        manifest_line_t *temp = existing_zeros;
+        while (temp){
+            if (!strcmp(temp->fname, ml->fname)){
+                prev_existing = 1;
+                break;
+            }
+            temp = temp->next;
+        }
+
+        if (ml->version == 0 && !prev_existing){
+            // this file was newly added in this manifest push;
+            // delete all its backups
+            struct stat st = {0};
+            int i;
+            for (i = ml->version; i >= 0; i++){
+                char *backup;
+                asprintf(&backup, "backups/%s_%d", ml->fname, i);
+                if (stat(backup, &st) != -1){
+                    remove(backup);
+
+                    // remove empty directories
+                    char *copy = strdup(backup);
+                    char *dir = dirname(copy);
+                    if (empty_directory(dir))
+                        rmdir(dir);
+                    free(copy);
+                } else
+                    i = -10; // done
+                free(backup);
+            }
+        }
+        clean_manifest_line(ml);
+    }
+    clean_file_buf(info);
+    remove(manifest_untarred);
+    free(manifest_untarred);
+    rmdir(tempdir);
+}
+
+/**
+ * Extract backup file to tempdir. All newer versions of that
+ * file in the backup directory are deleted.
+ *
+ * If it's a manifest file, we will parse newer manifests to find
+ * newly created files and delete their successor backups as well.
+ */
+void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
+
+    // untar backup file to folder
+    char *cmd;
+    asprintf(&cmd, "tar -xzf backups/%s_%d -C %s", fname, version, tempdir);
+    system(cmd);
+    free(cmd);
+
+    // make list of filenames that were already version 0 in the current manifest
+    // we should not assume these files were created by future manifest files
+    // and therefore should not remove them from the backups
+    manifest_line_t *head = NULL;
+    if (is_manifest){
+
+        // get filename of manifest in tempdir
+        char *manifest_untarred;
+        asprintf(&manifest_untarred, "%s/%s", tempdir, fname);
+        file_buf_t *info = init_file_buf(manifest_untarred);
+        free(manifest_untarred);
+
+        manifest_line_t *cur;
+        while (1){
+            read_file_until(info, '\n');
+            if (info->file_eof)
+                break;
+            manifest_line_t *ml = parse_manifest_line(info->data);
+            if (ml->version == 0){
+                if (!head){
+                    head = ml;
+                    cur = ml;
+                } else {
+                    cur->next = ml;
+                    cur = ml;
+                }
+            } else
+                clean_manifest_line(ml);
+        }
+        clean_file_buf(info);
+    }
+
+    // remove all newer versions of file from backup
+    struct stat st = {0};
+    int i;
+    for (i = version+1; i >= 0; i++){
+        char *backup;
+        asprintf(&backup, "backups/%s_%d", fname, i);
+        if (stat(backup, &st) != -1){
+            if (is_manifest)
+                remove_orphaned_files(backup, fname, head);
+            remove(backup);
+        } else
+            i = -10; // done
+        free(backup);
+    }
+
+    while (head){
+        manifest_line_t *temp = head->next;
+        clean_manifest_line(head);
+        head = temp;
+    }
+}
+
+/**
+ * Creates a directory in /tmp. Extracts the desired version
+ * manifest file into it. Then, for each file in the manifest,
+ * extracts the backup file into the /tmp directory and removes
+ * newer versions of the file from the backup since we're reverting.
+ * Finally, replaces the existing project with the directory created
+ * in /tmp.
+ *
+ * Note: Future version manifests are also parsed to remove any orphaned
+ * backup files.
+ */
+void rollback_every_file(char *project, char *version){
+    // create temp dir for extraction
+    char tempdir[15+1];
+    gen_temp_filename(tempdir);
+    mkdir(tempdir, 0755);
+
+    // extract manifest to tempdir
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    rollback_file(manifest, atoi(version), tempdir, 1);
+    free(manifest);
+
+    // open untarred manifest
+    asprintf(&manifest, "%s/%s/.Manifest", tempdir, project);
+    file_buf_t *info = init_file_buf(manifest);
+    free(manifest);
+
+    // read manifest line-by-line
+    read_file_until(info, '\n');
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml = parse_manifest_line(info->data);
+        rollback_file(ml->fname, ml->version, tempdir, 0);
+        clean_manifest_line(ml);
+    }
+    clean_file_buf(info);
+
+    // move tempdir to realdir
+    char *rm_old;
+    asprintf(&rm_old, "rm -rf %s", project);
+    system(rm_old);
+    free(rm_old);
+
+    char *mv_new;
+    asprintf(&mv_new, "mv %s/%s .", tempdir, project);
+    system(mv_new);
+    free(mv_new);
+
+    rmdir(tempdir);
 }

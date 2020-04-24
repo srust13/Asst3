@@ -1,4 +1,5 @@
 #pragma once
+
 #include <pthread.h>
 
 #define CHUNK_SIZE 1024
@@ -33,7 +34,8 @@ typedef struct manifest_line_t {
 } manifest_line_t;
 
 int file_exists_local(char *project, char *fname);
-void init_file_buf(file_buf_t *info, char *filename);
+void mkpath(char* file_path);
+file_buf_t *init_file_buf(char *filename);
 void clean_file_buf(file_buf_t *info);
 
 void send_int(int sock, int num);
@@ -65,7 +67,9 @@ int get_manifest_version(char *manifest);
 
 char* gen_commit_filename(char *project);
 void remove_all_commits(char *project);
-void removeAll_dFiles(char *commit);
+void update_repo_from_commit(char *commit);
 char *commit_exists(char *project, char *client_hex);
 
 void generate_update_conflict_files(char *project, char *client_manifest, char *server_manifest);
+
+void rollback_every_file(char *project, char *version);
