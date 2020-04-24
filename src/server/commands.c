@@ -17,11 +17,21 @@ void update(int sock, char *project){
     char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
     sprintf(manifest, "%s/.Manifest", project);
     send_file(manifest, sock, 0);
-    free(manifest);    
+    free(manifest);
 }
 
 void upgrade(int sock, char *project){
-    puts("Upgrade");
+    // recieve client .Update
+    char update[15+1];
+    gen_temp_filename(update);
+    recv_file(sock, update);
+
+    // generate tar of added and modified files from server and send to client
+    char *tar = generate_am_tar(update);
+    send_file(tar, sock, 0);
+
+    remove(tar);
+    free(tar);
 }
 
 void commit(int sock, char *project){

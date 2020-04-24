@@ -100,11 +100,80 @@ void update(char *project){
     close(sock);
 }
 
+/*
+The upgrade command will fail if the project name doesn’t exist on the server, if the server can not be
+contacted, if there is no .Update on the client side or if .Conflict exists.
+*/
 void upgrade(char *project){
-    puts("Upgrade");
-    printf("Project: %s\n", project);
-
+    // connect to server and make sure project exists
     init_socket_server(&sock, "upgrade");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    char *update = malloc(strlen(project) + strlen("/.Update") + 1);
+    sprintf(update, "%s/.Update", project);
+    struct stat st_update = {0};
+    int update_exists = stat(update, &st_update) != -1;
+
+    char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
+    sprintf(conflict, "%s/.Conflict", project);
+    struct stat st_conflict = {0};
+    int conflict_exists = stat(conflict, &st_conflict) != -1;
+
+    // if there is no .Update or there is a .Conflict, disconnect
+    if (!update_exists) {
+        puts("No update file. Update first.");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    } else if (conflict_exists) {
+        puts("Resolve all conflicts before updating.");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // if .Update is empty
+    if (st_update.st_size == 0) {
+        puts("Up to date.");
+    } else {
+        char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
+        sprintf(manifest, "%s/.Manifest", project);
+
+        // remove all files from .Manifest marked "D" in update
+        removeAll_dFiles_from_manifest(manifest, update);
+
+        // send .Update file to server
+        send_file(update, sock, 0);
+
+        // recieve tar of modified and added files from server
+        char tar[15+1];
+        gen_temp_filename(tar);
+        recv_file(sock, tar);
+
+        // if tar is not empty, untar it into project
+        struct stat st_tar = {0};
+        stat(tar, &st_tar);
+        if(st_tar.st_size > 0){
+            char *untar_cmd = malloc(strlen("tar xzf ") + strlen(tar) + 1);
+            sprintf(untar_cmd, "tar xzf %s", tar);
+            system(untar_cmd);
+            free(untar_cmd);
+            remove(tar);
+        }
+
+        // after pulling in all changes, recreate the manifest to account for modified/added files
+        regenerate_manifest_from_update(manifest, update);
+        free(manifest);
+    }
+
+    //remove(update);
+    free(update);
+    free(conflict);
     close(sock);
 }
 
@@ -224,7 +293,7 @@ void push(char *project){
         // regenerate manifest file from .Commit
         char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
         sprintf(manifestPath, "%s/.Manifest", project);
-        regenerate_manifest(manifestPath, commitPath);
+        regenerate_manifest_from_commit(manifestPath, commitPath);
 
         // send the manifest to the server
         send_file(manifestPath, sock, 0);

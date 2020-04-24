@@ -60,8 +60,10 @@ manifest_line_t *parse_manifest_line(char *line);
 void clean_manifest_line(manifest_line_t *ml);
 int generate_commit_file(char *commit, char *client_manifest, char *server_manifest);
 char* generate_am_tar(char *commitPath);
-void regenerate_manifest(char *client_manifest, char *commit);
+void regenerate_manifest_from_commit(char *client_manifest, char *commit);
 int get_manifest_version(char *manifest);
+void regenerate_manifest_from_update(char *manifest, char *update);
+void removeAll_dFiles_from_manifest(char *manifest, char *update);
 
 char* gen_commit_filename(char *project);
 void remove_all_commits(char *project);

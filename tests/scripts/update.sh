@@ -29,9 +29,6 @@ echo "adding line" >> huffman_dir/file2
 ../../bin/WTF push huffman_dir
 
 # tests the "C" of update
-echo "adding CONFLICT" >> huffman_dir/file2
-../../bin/WTF commit huffman_dir
-../../bin/WTF push huffman_dir
 
 cd ../client
 echo "i'm changing this file" >> huffman_dir/file2
