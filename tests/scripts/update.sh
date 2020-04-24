@@ -29,7 +29,6 @@ echo "adding line" >> huffman_dir/file2
 ../../bin/WTF push huffman_dir
 
 # tests the "C" of update
-
 cd ../client
 echo "i'm changing this file" >> huffman_dir/file2
 ../../bin/WTF update huffman_dir

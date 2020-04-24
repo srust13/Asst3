@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1208,7 +1209,7 @@ void regenerate_manifest_from_update(char *manifest, char *update){
         manifest_line_t *ml = parse_manifest_line(info->data);
 
         // if this line appears in "modified" list,
-        // copy new hash and version num
+        // get new hash and version num
         if (ml->code == '-'){
             manifest_line_t *cur = mod_lines;
             while (cur){
@@ -1263,10 +1264,9 @@ void regenerate_manifest_from_update(char *manifest, char *update){
  * Remove all files marked "D" in update from the manifest
  * For each line of update, if it's tagged "D", find the corresponding line in the manifest and delete it
  */
-void removeAll_dFiles_from_manifest(char *manifest, char *update){
+void removeAll_dFiles_from_manifest(char *manifest, char *update, int server_manifest_version){
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
     init_file_buf(info, update);
-    printf("\n");
 
     int file_count = 0;
     int max_file_count = 50;
@@ -1300,9 +1300,11 @@ void removeAll_dFiles_from_manifest(char *manifest, char *update){
     gen_temp_filename(tempfile);
     int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
-    // write the project version to the temp file
+    // write the project version of the server
     read_file_until(info, ' ');
-    write(fout, info->data, strlen(info->data));
+    char *proj_version_numb;
+    asprintf(&proj_version_numb, "%d", server_manifest_version);
+    write(fout, proj_version_numb, strlen(proj_version_numb));
     write(fout, " ", 1);
 
     // write the project name
@@ -1532,11 +1534,11 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                 // if the live hash of the client file matches the hash in the client manifest, mark it "M" in .Update
                 md5sum(ml_client->fname, hexstring);
                 if (!strcmp(hexstring, ml_client->hexdigest)){
-                    char *entry_line = generate_manifest_line('M', ml_client->hexdigest, ml_client->version, ml_client->fname);
+                    char *entry_line = generate_manifest_line('M', ml_server->hexdigest, ml_server->version, ml_server->fname);
                     write(fout, entry_line, strlen(entry_line));
 
-                    char *m_fpath = malloc(strlen("M ") + strlen(ml_client->fname) + 1);
-                    sprintf(m_fpath, "M %s", ml_client->fname);
+                    char *m_fpath = malloc(strlen("M ") + strlen(ml_server->fname) + 1);
+                    sprintf(m_fpath, "M %s", ml_server->fname);
                     puts(m_fpath);
                     free(m_fpath);
                     free(entry_line);

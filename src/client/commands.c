@@ -144,8 +144,14 @@ void upgrade(char *project){
         char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
         sprintf(manifest, "%s/.Manifest", project);
 
+        // retrieve server .Manifest and parse version
+        char tempfile[15+1];
+        gen_temp_filename(tempfile);
+        recv_file(sock, tempfile);
+        int server_manifest_version = get_manifest_version(tempfile);
+
         // remove all files from .Manifest marked "D" in update
-        removeAll_dFiles_from_manifest(manifest, update);
+        removeAll_dFiles_from_manifest(manifest, update, server_manifest_version);
 
         // send .Update file to server
         send_file(update, sock, 0);
@@ -171,7 +177,7 @@ void upgrade(char *project){
         free(manifest);
     }
 
-    //remove(update);
+    //remove(update); TODO: remove this as a comment
     free(update);
     free(conflict);
     close(sock);

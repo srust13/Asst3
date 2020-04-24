@@ -68,7 +68,11 @@ update: push
 	@(./tests/scripts/update.sh 1>/dev/null && \
 	echo ${GREEN}PASS${NC} update) || echo ${RED}FAIL${NC} update
 
-run: currentversion destroy update
+upgrade: update
+	@(./tests/scripts/upgrade.sh 1>/dev/null && \
+	echo ${GREEN}PASS${NC} upgrade) || echo ${RED}FAIL${NC} upgrade
+
+run: currentversion destroy upgrade
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure tests_out/client2

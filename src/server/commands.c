@@ -21,6 +21,12 @@ void update(int sock, char *project){
 }
 
 void upgrade(int sock, char *project){
+    // send manifest to client
+    char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
+    sprintf(manifest, "%s/.Manifest", project);
+    send_file(manifest, sock, 0);
+    free(manifest);
+
     // recieve client .Update
     char update[15+1];
     gen_temp_filename(update);
