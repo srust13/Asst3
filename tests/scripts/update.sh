@@ -38,14 +38,17 @@ kill -INT $pid &2>/dev/null
 wait $pid 2>/dev/null
 
 result_update="$(cat huffman_dir/.Update)"
-expected_update='
-A 7A9993E80A235A3632DEEC9A6ED2EDA1 0 huffman_dir/file3
-D F5AC8127B3B6B85CDC13F237C6005D80 1 huffman_dir/file1
-M 1FFB2614C326255B00E3D94DDED89DAF 1 huffman_dir/file2'
+expected_update='A 7A9993E80A235A3632DEEC9A6ED2EDA1 0 huffman_dir/file3
+D F5AC8127B3B6B85CDC13F237C6005D80 1 huffman_dir/file1'
 
 result_conflict="$(cat huffman_dir/.Conflict)"
-expected_conflict='
-x
-'
+expected_conflict='C F9B11CF2A505297A82D209FB28B62FE2 0 huffman_dir/file2'
 
-[[ "$result_update" == "$expected_update" ]] && [[ "$result_conflict" == "$expected_conflict" ]]
+result_manifest="$(cat huffman_dir/.Manifest)"
+expected_manifest='2 huffman_dir
+- F5AC8127B3B6B85CDC13F237C6005D80 1 huffman_dir/file1
+- F9B11CF2A505297A82D209FB28B62FE2 0 huffman_dir/file2'
+
+
+[[ "$result_update" == "$expected_update" ]] && [[ "$result_conflict" == "$expected_conflict" ]] &&
+[[ "$result_manifest" == "$expected_manifest" ]]
