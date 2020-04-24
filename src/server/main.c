@@ -182,13 +182,13 @@ int main(int argc, char *argv[]){
         // just un-comment the below line
         // and comment out the if-statement and its contents entirely
 
-        handle_connection((void *) &client_fd);
+        // handle_connection((void *) &client_fd);
 
-        // if(pthread_create(&thread_id, NULL,
-        //                   handle_connection, (void *) &client_fd) < 0){
-        //     puts("Couldn't create thread");
-        //     exit(EXIT_FAILURE);
-        // }
+        if(pthread_create(&thread_id, NULL,
+                          handle_connection, (void *) &client_fd) < 0){
+            puts("Couldn't create thread");
+            exit(EXIT_FAILURE);
+        }
     }
     return 0;
 }
