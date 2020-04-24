@@ -100,11 +100,35 @@ void update(char *project){
     close(sock);
 }
 
-/*
-The upgrade command will fail if the project name doesn’t exist on the server, if the server can not be
-contacted, if there is no .Update on the client side or if .Conflict exists.
-*/
 void upgrade(char *project){
+
+    // check for valid .Update and no .Conflict
+    char *update;
+    asprintf(&update, "%s/.Update", project);
+    struct stat st_update = {0};
+    int update_exists = stat(update, &st_update) != -1;
+
+    char *conflict;
+    asprintf(&conflict, "%s/.Conflict", project);
+    struct stat st_conflict = {0};
+    int conflict_exists = stat(conflict, &st_conflict) != -1;
+
+    if (!update_exists) {
+        puts("No update file; please run Update first.");
+        puts("Client disconnecting.");
+        exit(EXIT_FAILURE);
+    } else if (conflict_exists) {
+        puts("Resolve all conflicts before updating.");
+        puts("Client disconnecting.");
+        exit(EXIT_FAILURE);
+    } else if (st_update.st_size == 0) {
+        puts("Up to date.");
+        free(update);
+        free(conflict);
+        close(sock);
+        return;
+    }
+
     // connect to server and make sure project exists
     init_socket_server(&sock, "upgrade");
     if (!server_project_exists(sock, project)){
@@ -114,68 +138,37 @@ void upgrade(char *project){
         exit(EXIT_FAILURE);
     }
 
-    char *update = malloc(strlen(project) + strlen("/.Update") + 1);
-    sprintf(update, "%s/.Update", project);
-    struct stat st_update = {0};
-    int update_exists = stat(update, &st_update) != -1;
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
 
-    char *conflict = malloc(strlen(project) + strlen("/.Conflict") + 1);
-    sprintf(conflict, "%s/.Conflict", project);
-    struct stat st_conflict = {0};
-    int conflict_exists = stat(conflict, &st_conflict) != -1;
+    // retrieve server .Manifest version
+    int server_manifest_version = recv_int(sock);
 
-    // if there is no .Update or there is a .Conflict, disconnect
-    if (!update_exists) {
-        puts("No update file. Update first.");
-        puts("Client disconnecting.");
-        close(sock);
-        exit(EXIT_FAILURE);
-    } else if (conflict_exists) {
-        puts("Resolve all conflicts before updating.");
-        puts("Client disconnecting.");
-        close(sock);
-        exit(EXIT_FAILURE);
+    // remove all files from .Manifest marked "D" in update
+    remove_dFiles_from_manifest(manifest, update, server_manifest_version);
+
+    // send .Update file to server
+    send_file(update, sock, 0);
+
+    // recieve tar of modified and added files from server
+    char tar[15+1];
+    gen_temp_filename(tar);
+    recv_file(sock, tar);
+
+    // if tar is not empty, untar it into project
+    struct stat st_tar = {0};
+    stat(tar, &st_tar);
+    if(st_tar.st_size > 0){
+        char *untar_cmd = malloc(strlen("tar xzf ") + strlen(tar) + 1);
+        sprintf(untar_cmd, "tar xzf %s", tar);
+        system(untar_cmd);
+        free(untar_cmd);
+        remove(tar);
     }
 
-    // if .Update is empty
-    if (st_update.st_size == 0) {
-        puts("Up to date.");
-    } else {
-        char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
-        sprintf(manifest, "%s/.Manifest", project);
-
-        // retrieve server .Manifest and parse version
-        char tempfile[15+1];
-        gen_temp_filename(tempfile);
-        recv_file(sock, tempfile);
-        int server_manifest_version = get_manifest_version(tempfile);
-
-        // remove all files from .Manifest marked "D" in update
-        removeAll_dFiles_from_manifest(manifest, update, server_manifest_version);
-
-        // send .Update file to server
-        send_file(update, sock, 0);
-
-        // recieve tar of modified and added files from server
-        char tar[15+1];
-        gen_temp_filename(tar);
-        recv_file(sock, tar);
-
-        // if tar is not empty, untar it into project
-        struct stat st_tar = {0};
-        stat(tar, &st_tar);
-        if(st_tar.st_size > 0){
-            char *untar_cmd = malloc(strlen("tar xzf ") + strlen(tar) + 1);
-            sprintf(untar_cmd, "tar xzf %s", tar);
-            system(untar_cmd);
-            free(untar_cmd);
-            remove(tar);
-        }
-
-        // after pulling in all changes, recreate the manifest to account for modified/added files
-        regenerate_manifest_from_update(manifest, update);
-        free(manifest);
-    }
+    // after pulling in all changes, recreate the manifest to account for modified/added files
+    regenerate_manifest_from_update(manifest, update);
+    free(manifest);
 
     //remove(update); TODO: remove this as a comment
     free(update);

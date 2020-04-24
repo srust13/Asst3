@@ -1264,15 +1264,11 @@ void regenerate_manifest_from_update(char *manifest, char *update){
     move_file(tempfile, manifest);
 }
 
-
-
 /**
- * Remove all files marked "D" in update from the manifest
- * For each line of update, if it's tagged "D", find the corresponding line in the manifest and delete it
+ * Remove all files marked "D" in update from the manifest.
  */
-void removeAll_dFiles_from_manifest(char *manifest, char *update, int server_manifest_version){
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, update);
+void remove_dFiles_from_manifest(char *manifest, char *update, int server_manifest_version){
+    file_buf_t *info = init_file_buf(update);
 
     int file_count = 0;
     int max_file_count = 50;

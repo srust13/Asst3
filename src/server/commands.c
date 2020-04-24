@@ -22,10 +22,11 @@ void update(int sock, char *project){
 }
 
 void upgrade(int sock, char *project){
-    // send manifest to client
-    char *manifest = malloc(strlen(project) + strlen("/.Manifest") + 1);
-    sprintf(manifest, "%s/.Manifest", project);
-    send_file(manifest, sock, 0);
+    // send manifest version to client
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    int server_manifest_version = get_manifest_version(manifest);
+    send_int(sock, server_manifest_version);
     free(manifest);
 
     // recieve client .Update
