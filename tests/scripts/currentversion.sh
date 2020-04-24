@@ -23,6 +23,7 @@ Client gracefully disconnected from server
 Command completed successfully'
 
 # kill server
+sleep .1
 kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 

@@ -11,6 +11,7 @@ cd ../client
 ../../bin/WTF create huffman_dir
 
 # kill server
+sleep .1
 kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 

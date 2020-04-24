@@ -16,6 +16,7 @@ cd ../client
 ../../bin/WTF destroy nonexistentProj && exit 1
 
 # kill server
+sleep .1
 kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 

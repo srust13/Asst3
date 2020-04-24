@@ -27,6 +27,7 @@ M 1FFB2614C326255B00E3D94DDED89DAF 1 huffman_dir/file2
 Command completed successfully'
 
 # kill server
+sleep .1
 kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
