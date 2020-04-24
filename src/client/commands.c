@@ -390,10 +390,29 @@ void currentversion(char *project){
 }
 
 void history(char *project){
-    puts("History");
-    printf("Project: %s\n", project);
-
     init_socket_server(&sock, "history");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // receive .History into a tempfile
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    recv_file(sock, tempfile);
+
+    file_buf_t *info = init_file_buf(tempfile);
+
+    // go through the file and print output
+    while(1) {
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        printf("%s\n", info->data);
+    }
+    puts("");
     close(sock);
 }
 
