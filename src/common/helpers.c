@@ -1190,8 +1190,7 @@ void regenerate_manifest_from_update(char *manifest, char *update){
     manifest_line_t *mod_lines = modified_files_from_commit(update);
 
     // read from client manifest
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
 
     // open tempfile to write new manifest to
     char tempfile[15+1];
@@ -1243,8 +1242,7 @@ void regenerate_manifest_from_update(char *manifest, char *update){
 
     // prepare to read update file
     clean_file_buf(info);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, update);
+    info = init_file_buf(update);
 
     // go through the lines of update
     while(1) {
@@ -1271,8 +1269,7 @@ void regenerate_manifest_from_update(char *manifest, char *update){
  * For each line of update, if it's tagged "D", find the corresponding line in the manifest and delete it
  */
 void removeAll_dFiles_from_manifest(char *manifest, char *update, int server_manifest_version){
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, update);
+    file_buf_t *info = init_file_buf(update);
 
     int file_count = 0;
     int max_file_count = 50;
@@ -1298,8 +1295,7 @@ void removeAll_dFiles_from_manifest(char *manifest, char *update, int server_man
 
     // prepare manifest for reading
     clean_file_buf(info);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    info = init_file_buf(manifest);
 
     // open tempfile to write new manifest to
     char tempfile[15+1];
