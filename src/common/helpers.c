@@ -1284,8 +1284,9 @@ void remove_all_commits(char *project) {
 
 /**
  * Remove all files marked "D" in .Commit
+ * Backup all files marked "A" and "M".
  */
-void removeAll_dFiles(char *commit) {
+void update_repo_from_commit(char *commit) {
     // read from commit file
     file_buf_t *info = calloc(1, sizeof(file_buf_t));
     init_file_buf(info, commit);
@@ -1299,6 +1300,17 @@ void removeAll_dFiles(char *commit) {
         // remove all "D" files
         if (ml->code == 'D'){
             remove(ml->fname);
+        } else {
+            // make backup
+            char *backup_fname = malloc(strlen("backups/") + strlen(ml->fname) + 1 + 10 + 1);
+            sprintf(backup_fname, "backups/%s_%d", ml->fname, ml->version);
+            mkpath(backup_fname);
+            char *cmd = malloc(strlen("tar -czf %s %s") + strlen(backup_fname) + 1 + strlen(ml->fname) + 1);
+            sprintf(cmd, "tar -czf %s %s", backup_fname, ml->fname);
+            puts(cmd);
+            system(cmd);
+            free(cmd);
+            free(backup_fname);
         }
         clean_manifest_line(ml);
     }

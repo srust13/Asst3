@@ -338,6 +338,12 @@ void history(char *project){
 
 void rollback(char *project, char *version){
     init_socket_server(&sock, "rollback");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
     send_line(sock, version);
     if (!recv_int(sock)){
         puts("Version not found on server!");

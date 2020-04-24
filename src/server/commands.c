@@ -59,13 +59,6 @@ void push(int sock, char *project){
     }
     send_int(sock, 1);
 
-    // remove all files that have been deleted in the .Commit
-    removeAll_dFiles(commitMatch);
-    free(commitMatch);
-
-    // Expire all .Commit files for this project
-    remove_all_commits(project);
-
     // receive tar with changed files
     char temp_tar[15+1];
     gen_temp_filename(temp_tar);
@@ -85,16 +78,42 @@ void push(int sock, char *project){
     char *manifestPath = malloc(strlen(project) + strlen("/.Manifest") + 1);
     sprintf(manifestPath, "%s/.Manifest", project);
     recv_file(sock, manifestPath);
-    free(manifestPath);
+
+    // backup A/M files and remove D files
+    update_repo_from_commit(commitMatch);
+    free(commitMatch);
+
+    // Expire all .Commit files for this project
+    remove_all_commits(project);
+
+    // backup .Manifest
+    int version = get_manifest_version(manifestPath);
+    char *cmd = malloc(strlen("tar -czf ") + strlen(manifestPath) + strlen("backups/") + strlen(manifestPath) + 1 + 10 + 1);
+    sprintf(cmd, "tar -czf backups/%s_%d %s", manifestPath, version, manifestPath);
+    system(cmd);
+    free(cmd);
 
     // cleanup
+    free(manifestPath);
     remove(temp_tar);
 }
 
 void create(int sock, char *project){
-    // send requested .Manifest to client
+    // backup manifest
     char *manifest = malloc(strlen(project) + strlen(".Manifest") + strlen("/ "));
     sprintf(manifest, "%s/.Manifest", project);
+
+    char *backup_manifest = malloc(strlen("backups/") + strlen(manifest) + 1);
+    sprintf(backup_manifest, "backups/%s", manifest);
+    mkpath(backup_manifest);
+    free(backup_manifest);
+
+    char *cmd = malloc(strlen("tar -czf ") + strlen(manifest) + strlen("backups/") + strlen(manifest) + 1 + 10 + 1);
+    sprintf(cmd, "tar -czf backups/%s_%d %s", manifest, 0, manifest);
+    system(cmd);
+    free(cmd);
+
+    // send requested .Manifest to client
     send_file(manifest, sock, 1);
     free(manifest);
 }
@@ -161,5 +180,16 @@ void rollback(int sock, char *project){
     free(version);
 
     // move tempdir to realdir
+    char *rm_old = malloc(strlen("rm -rf ") + strlen(project) + 1);
+    sprintf(rm_old, "rm -rf %s", project);
+    system(rm_old);
+    free(rm_old);
+
+    char *mv_new = malloc(strlen("mv ") + strlen(tempdir) + 1 + strlen(project) + 1);
+    sprintf(mv_new, "mv %s/%s .", tempdir, project);
+    system(mv_new);
+    free(mv_new);
+
+    rmdir(tempdir);
     send_int(sock, exists);
 }
