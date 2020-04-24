@@ -43,7 +43,7 @@ rm -rf rback
 kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
 
-given_backups_rback="$(ls -aRt ../server/backups/rback)"
+given_backups_rback="$(ls -aR ../server/backups/rback | sort)"
 expected_backups_rback='../server/backups/rback:
 .
 somedir
@@ -57,8 +57,9 @@ file1_0
 ..
 .
 file3_0'
+expected_backups_rback=$(echo "$expected_backups_rback" | sort)
 
-given_server_rback="$(ls -aRt ../server/rback)"
+given_server_rback="$(ls -aR ../server/rback | sort)"
 expected_server_rback='../server/rback:
 ..
 .
@@ -71,6 +72,7 @@ file2
 .
 ..
 file3'
+expected_server_rback=$(echo "$expected_server_rback" | sort)
 
 given_manifest_contents="$(cat ../server/rback/.Manifest)"
 [[ "$given_server_rback" == "$expected_server_rback" ]] && [[ "$given_backups_rback" == "$expected_backups_rback" ]] && [[ "$expected_manifest_contents" == "$given_manifest_contents" ]]
