@@ -35,7 +35,7 @@ typedef struct manifest_line_t {
 
 int file_exists_local(char *project, char *fname);
 void mkpath(char* file_path);
-void init_file_buf(file_buf_t *info, char *filename);
+file_buf_t *init_file_buf(char *filename);
 void clean_file_buf(file_buf_t *info);
 
 void send_int(int sock, int num);

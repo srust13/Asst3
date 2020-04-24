@@ -181,11 +181,13 @@ int empty_directory(char *dirname){
   return n <= 2; // Directory Empty
 }
 
-void init_file_buf(file_buf_t *info, char *filename) {
+file_buf_t *init_file_buf(char *filename) {
+    file_buf_t *info = calloc(1, sizeof(file_buf_t));
     info->fd = open(filename, O_RDONLY);
     info->data = malloc(CHUNK_SIZE);
     info->remaining = malloc(CHUNK_SIZE);
     info->data_buf_size = CHUNK_SIZE;
+    return info;
 }
 
 void clean_file_buf(file_buf_t *info){
@@ -559,8 +561,7 @@ void init_socket_server(int *sock, char *command){
     }
 
     // read data from file
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, ".configure");
+    file_buf_t *info = init_file_buf(".configure");
 
     // read hostname
     read_file_until(info, ' ');
@@ -676,8 +677,7 @@ char *set_create_project(int sock, int should_create){
 char *search_file_in_manifest(char *manifest, char *search){
 
     // search for filename in each line of manifest
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
     while (1){
         read_file_until(info, '\n');
         if (info->file_eof)
@@ -734,8 +734,7 @@ void add_to_manifest(char *project, char *filename){
     // open manifest
     char *manifest;
     asprintf(&manifest, "%s/.Manifest", project);
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
 
     // open temp filename - strlen("/tmp/1234567890") = 15
     char tempfile[15+1];
@@ -803,8 +802,7 @@ void remove_from_manifest(char *project, char *filename){
     // open manifest
     char *manifest;
     asprintf(&manifest, "%s/.Manifest", project);
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
 
     // open temp filename - strlen("/tmp/1234567890") = 15
     char tempfile[15+1];
@@ -870,8 +868,7 @@ void remove_from_manifest(char *project, char *filename){
 int generate_commit_file(char *commit, char *client_manifest, char *server_manifest){
 
     // prepare local manifest for reading
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, client_manifest);
+    file_buf_t *info = init_file_buf(client_manifest);
 
     // open temp file for writing new manifest
     char tempfile[15+1];
@@ -1007,8 +1004,7 @@ char *generate_am_tar(char *commitPath) {
     int cmd_length = 0;
 
     // get list of files to tar from commit file's "A" or "M" codes
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, commitPath);
+    file_buf_t *info = init_file_buf(commitPath);
 
     while (1){
         read_file_until(info, '\n');
@@ -1071,8 +1067,7 @@ manifest_line_t *modified_files_from_commit(char *commit){
     manifest_line_t *cur = NULL;
 
     // read from commit line by line
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, commit);
+    file_buf_t *info = init_file_buf(commit);
     while (1){
         read_file_until(info, '\n');
         if (info->file_eof)
@@ -1107,8 +1102,7 @@ void regenerate_manifest(char *client_manifest, char *commit){
     manifest_line_t *mod_lines = modified_files_from_commit(commit);
 
     // read from client manifest
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, client_manifest);
+    file_buf_t *info = init_file_buf(client_manifest);
 
     // open tempfile to write new manifest to
     char tempfile[15+1];
@@ -1176,8 +1170,7 @@ void regenerate_manifest(char *client_manifest, char *commit){
  * Returns the version number of a manifest
  */
 int get_manifest_version(char *manifest){
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
     read_file_until(info, ' ');
     int manifest_version = atoi(info->data);
     clean_file_buf(info);
@@ -1263,8 +1256,7 @@ void remove_all_commits(char *project) {
  */
 void update_repo_from_commit(char *commit) {
     // read from commit file
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, commit);
+    file_buf_t *info = init_file_buf(commit);
 
     while (1){
         read_file_until(info, '\n');
@@ -1319,8 +1311,7 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
     int fout_conflict = open(conflict, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 
     // prepare server manifest for reading
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, server_manifest);
+    file_buf_t *info = init_file_buf(server_manifest);
 
     // skip first line of manifest
     read_file_until(info, '\n');
@@ -1350,8 +1341,7 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
 
     // prepare client manifest for reading
     clean_file_buf(info);
-    info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, client_manifest);
+    info = init_file_buf(client_manifest);
 
     // skip first line of manifest
     read_file_until(info, ' ');
@@ -1444,8 +1434,7 @@ void remove_orphaned_files(char *manifest, char *fname, manifest_line_t *existin
     asprintf(&manifest_untarred, "%s/%s", tempdir, fname);
 
     // go line by line in manifest and find version 0 files
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest_untarred);
+    file_buf_t *info = init_file_buf(manifest_untarred);
     read_file_until(info, '\n');
     while (1){
         read_file_until(info, '\n');
@@ -1517,8 +1506,7 @@ void rollback_file(char *fname, int version, char *tempdir, int is_manifest){
         // get filename of manifest in tempdir
         char *manifest_untarred;
         asprintf(&manifest_untarred, "%s/%s", tempdir, fname);
-        file_buf_t *info = calloc(1, sizeof(file_buf_t));
-        init_file_buf(info, manifest_untarred);
+        file_buf_t *info = init_file_buf(manifest_untarred);
         free(manifest_untarred);
 
         manifest_line_t *cur;
@@ -1585,8 +1573,7 @@ void rollback_every_file(char *project, char *version){
     asprintf(&manifest, "%s/%s/.Manifest", tempdir, project);
 
     // open and read manifest line-by-line
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, manifest);
+    file_buf_t *info = init_file_buf(manifest);
     read_file_until(info, '\n');
 
     while (1){

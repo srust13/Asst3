@@ -302,8 +302,7 @@ void currentversion(char *project){
     gen_temp_filename(tempfile);
     recv_file(sock, tempfile);
 
-    file_buf_t *info = calloc(1, sizeof(file_buf_t));
-    init_file_buf(info, tempfile);
+    file_buf_t *info = init_file_buf(tempfile);
 
     // skip first line that just has the name of the project
     puts("\n----------------------------------------------");
