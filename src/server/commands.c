@@ -98,14 +98,14 @@ void push(int sock, char *project){
     recv_file(sock, manifestPath);
 
     // backup A/M files and remove D files
-    update_repo_from_commit(commitMatch);
+    int version = get_manifest_version(manifestPath);
+    update_repo_from_commit(commitMatch, project, version);
     free(commitMatch);
 
     // Expire all .Commit files for this project
     remove_all_commits(project);
 
     // backup .Manifest
-    int version = get_manifest_version(manifestPath);
     char *cmd;
     asprintf(&cmd, "tar -czf backups/%s_%d %s", manifestPath, version, manifestPath);
     system(cmd);
@@ -152,7 +152,45 @@ void currentversion(int sock, char *project){
 }
 
 void history(int sock, char *project){
-    puts("History");
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    int version = get_manifest_version(manifest);
+    free(manifest);
+
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    struct stat st = {0};
+    int i;
+    for (i = 0; i >= 0; i++){
+        char *backup;
+        asprintf(&backup, "history/%s/.Commit_%d", project, i);
+        if (stat(backup, &st) != -1){
+
+            // write version number
+            char *num;
+            asprintf(&num, "%d\n", i);
+            write(fout, num, strlen(num));
+            free(num);
+
+            // write file contents
+            int eof = 0;
+            int bytes_read = 0;
+            int fin = open(backup, O_RDONLY);
+            while (!eof){
+                char *buf = read_file_chunk(fin, &bytes_read, &eof);
+                write(fout, buf, bytes_read);
+            }
+            close(fin);
+
+        } else
+            i = -10; // done
+        free(backup);
+    }
+    close(fout);
+    send_file(tempfile, sock, 0);
+    remove(tempfile);
 }
 
 void rollback(int sock, char *project){
@@ -170,6 +208,18 @@ void rollback(int sock, char *project){
         return;
     }
     free(manifest_backup);
+
+    // delete old .Commit files in history
+    int i;
+    for (i = atoi(version) + 1; i >= 0; i++){
+        char *backup;
+        asprintf(&backup, "history/%s/.Commit_%d", project, i);
+        if (stat(backup, &st) != -1){
+            remove(backup);
+        } else
+            i = -10; // done
+        free(backup);
+    }
 
     // execute rollback
     rollback_every_file(project, version);

@@ -68,9 +68,10 @@ void regenerate_manifest_from_update(char *manifest, char *update, int server_ma
 
 char* gen_commit_filename(char *project);
 void remove_all_commits(char *project);
-void update_repo_from_commit(char *commit);
+void update_repo_from_commit(char *commit, char *project, int manifest_version_num);
 char *commit_exists(char *project, char *client_hex);
 
 void generate_update_conflict_files(char *project, char *client_manifest, char *server_manifest);
 
 void rollback_every_file(char *project, char *version);
+char *read_file_chunk(int fd, int *bytes_read, int *eof);

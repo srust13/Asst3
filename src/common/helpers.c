@@ -1331,8 +1331,9 @@ void remove_all_commits(char *project) {
 /**
  * Remove all files marked "D" in .Commit
  * Backup all files marked "A" and "M".
+ * Save commit file for history.
  */
-void update_repo_from_commit(char *commit) {
+void update_repo_from_commit(char *commit, char *project, int manifest_version_num) {
     // read from commit file
     file_buf_t *info = init_file_buf(commit);
 
@@ -1367,6 +1368,15 @@ void update_repo_from_commit(char *commit) {
         clean_manifest_line(ml);
     }
     clean_file_buf(info);
+
+    // save commit file for history
+    char *commit_backup;
+    asprintf(&commit_backup, "history/%s/.Commit_%d", project, manifest_version_num);
+    mkpath(commit_backup);
+    char *cmd;
+    asprintf(&cmd, "cp %s %s", commit, commit_backup);
+    free(cmd);
+    free(commit_backup);
 }
 
 /**********************************************************************************
