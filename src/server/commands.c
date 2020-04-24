@@ -22,7 +22,24 @@ void update(int sock, char *project){
 }
 
 void upgrade(int sock, char *project){
-    puts("Upgrade");
+
+    // recieve client .Update
+    char update[15+1];
+    gen_temp_filename(update);
+    recv_file(sock, update);
+
+    // generate tar of added/modified files and send to client
+    char *tar = generate_am_tar(update);
+    send_file(tar, sock, 0);
+    remove(tar);
+    remove(update);
+    free(tar);
+
+    // send manifest version to client
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    send_int(sock, get_manifest_version(manifest));
+    free(manifest);
 }
 
 void commit(int sock, char *project){

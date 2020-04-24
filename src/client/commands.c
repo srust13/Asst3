@@ -101,10 +101,72 @@ void update(char *project){
 }
 
 void upgrade(char *project){
-    puts("Upgrade");
-    printf("Project: %s\n", project);
 
+    // check for valid .Update and no .Conflict
+    char *update;
+    asprintf(&update, "%s/.Update", project);
+    struct stat st_update = {0};
+    int update_exists = stat(update, &st_update) != -1;
+
+    char *conflict;
+    asprintf(&conflict, "%s/.Conflict", project);
+    struct stat st_conflict = {0};
+    int conflict_exists = stat(conflict, &st_conflict) != -1;
+
+    if (!update_exists) {
+        puts("No update file; please run Update first.");
+        puts("Client disconnecting.");
+        exit(EXIT_FAILURE);
+    } else if (conflict_exists) {
+        puts("Resolve all conflicts before updating.");
+        puts("Client disconnecting.");
+        exit(EXIT_FAILURE);
+    } else if (st_update.st_size == 0) {
+        puts("Up to date.");
+        free(update);
+        free(conflict);
+        close(sock);
+        return;
+    }
+
+    // connect to server and make sure project exists
     init_socket_server(&sock, "upgrade");
+    if (!server_project_exists(sock, project)){
+        puts("Project doesn't exist on server!");
+        puts("Client disconnecting.");
+        close(sock);
+        exit(EXIT_FAILURE);
+    }
+
+    // receive tar of modified/added files from server
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    send_file(update, sock, 0);
+    recv_file(sock, tempfile);
+
+    // if tar is not empty, untar it into project
+    struct stat st_tar = {0};
+    stat(tempfile, &st_tar);
+    if(st_tar.st_size > 0){
+        char *untar_cmd;
+        asprintf(&untar_cmd, "tar xzf %s", tempfile);
+        system(untar_cmd);
+        free(untar_cmd);
+    }
+    remove(tempfile);
+
+    // after pulling in all changes, recreate
+    // using server manifest version and update information
+    int server_manifest_version = recv_int(sock);
+    char *manifest;
+    asprintf(&manifest, "%s/.Manifest", project);
+    regenerate_manifest_from_update(manifest, update, server_manifest_version);
+
+    // cleanup
+    free(manifest);
+    remove(update);
+    free(update);
+    free(conflict);
     close(sock);
 }
 
@@ -224,7 +286,7 @@ void push(char *project){
         // regenerate manifest file from .Commit
         char *manifestPath;
         asprintf(&manifestPath, "%s/.Manifest", project);
-        regenerate_manifest(manifestPath, commitPath);
+        regenerate_manifest_from_commit(manifestPath, commitPath);
 
         // send the manifest to the server
         send_file(manifestPath, sock, 0);

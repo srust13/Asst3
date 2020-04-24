@@ -20,6 +20,7 @@ echo "somethingmore" > rback/somedir/file3
 ../../bin/WTF add rback rback/somedir/file3
 ../../bin/WTF commit rback
 ../../bin/WTF push rback
+expected_manifest_contents="$(cat ../server/rback/.Manifest)"
 
 # push 2
 echo "evenmore" > rback/somedir/anotherdir/file4
@@ -38,8 +39,38 @@ echo "somethingdifferent" > rback/somedir/anotherdir/file4
 rm -rf rback
 ../../bin/WTF checkout rback
 
-ls -alh ../server/backups/rback/somedir
-
 # kill server
 kill -INT $pid 2>/dev/null
 wait $pid 2>/dev/null
+
+given_backups_rback="$(ls -aRt ../server/backups/rback)"
+expected_backups_rback='../server/backups/rback:
+.
+somedir
+.Manifest_1
+file2_0
+file1_0
+.Manifest_0
+..
+
+../server/backups/rback/somedir:
+..
+.
+file3_0'
+
+given_server_rback="$(ls -aRt ../server/rback)"
+expected_server_rback='../server/rback:
+..
+.
+somedir
+file1
+file2
+.Manifest
+
+../server/rback/somedir:
+.
+..
+file3'
+
+given_manifest_contents="$(cat ../server/rback/.Manifest)"
+[[ "$given_server_rback" == "$expected_server_rback" ]] && [[ "$given_backups_rback" == "$expected_backups_rback" ]] && [[ "$expected_manifest_contents" == "$given_manifest_contents" ]]

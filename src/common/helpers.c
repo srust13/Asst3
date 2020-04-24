@@ -1090,12 +1090,12 @@ manifest_line_t *modified_files_from_commit(char *commit){
 
 /**
  * After pushing, recreate the Manifest file with
- * <code> = "-" on client to files.
+ * <code> = "-" on client to files using .Commit
  *
  * The line is added in the form:
  * <code> <md5_hexdigest> <version> <filename><\n>
  */
-void regenerate_manifest(char *client_manifest, char *commit){
+void regenerate_manifest_from_commit(char *client_manifest, char *commit){
 
     // get list of all "modified" files from commit
     manifest_line_t *mod_lines = modified_files_from_commit(commit);
@@ -1174,6 +1174,85 @@ int get_manifest_version(char *manifest){
     int manifest_version = atoi(info->data);
     clean_file_buf(info);
     return manifest_version;
+}
+
+/**
+ * After upgrade, recreate the Manifest file with
+ * <code> = "-" on client to files using .Update
+ *
+ * The line is added in the form:
+ * <code> <md5_hexdigest> <version> <filename><\n>
+ */
+void regenerate_manifest_from_update(char *manifest, char *update, int server_man_version){
+
+    // open tempfile to write new manifest to
+    char tempfile[15+1];
+    gen_temp_filename(tempfile);
+    int fout = open(tempfile, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+
+    // write the project version to the temp file
+    file_buf_t *info = init_file_buf(manifest);
+    read_file_until(info, ' ');
+    char *server_manifest_version;
+    asprintf(&server_manifest_version, "%d", server_man_version);
+    write(fout, server_manifest_version, strlen(server_manifest_version));
+    write(fout, " ", 1);
+    free(server_manifest_version);
+
+    // write the project name
+    read_file_until(info, '\n');
+    write_line(fout, info->data);
+
+    // go line by line in manifest
+    // 1. Omit D lines
+    // 2. Update M lines
+    // 3. Append A lines to the end (done later)
+    while (1){
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml = parse_manifest_line(info->data);
+
+        // search in update for the file. if not found, just add to manifest.
+        char *update_line = search_file_in_manifest(update, ml->fname);
+        if (!update_line) {
+            write_line(fout, info->data);
+            clean_manifest_line(ml);
+            continue;
+        }
+
+        // if "modify", just write the new line
+        manifest_line_t *ml_update = parse_manifest_line(update_line);
+        if (ml_update->code == 'M'){
+            char *new_line = generate_manifest_line(
+                '-', ml_update->hexdigest, ml_update->version, ml_update->fname);
+            write(fout, new_line, strlen(new_line));
+            free(new_line);
+        }
+
+        clean_manifest_line(ml);
+        clean_manifest_line(ml_update);
+    }
+    clean_file_buf(info);
+
+    // add entries for "A" lines in Update file
+    info = init_file_buf(update);
+    while(1) {
+        read_file_until(info, '\n');
+        if (info->file_eof)
+            break;
+        manifest_line_t *ml = parse_manifest_line(info->data);
+
+        // if the file is marked "A" in .Update, add it to manifest
+        if(ml->code == 'A'){
+            write_line(fout, info->data);
+        }
+        clean_manifest_line(ml);
+    }
+
+    close(fout);
+    clean_file_buf(info);
+    move_file(tempfile, manifest);
 }
 
 /**********************************************************************************
@@ -1373,7 +1452,7 @@ void generate_update_conflict_files(char *project, char *client_manifest, char *
                 // if the live hash of the client file matches the hash in the client manifest, mark it "M" in .Update
                 md5sum(ml_client->fname, hexstring);
                 if (!strcmp(hexstring, ml_client->hexdigest)){
-                    char *entry_line = generate_manifest_line('M', ml_client->hexdigest, ml_client->version, ml_client->fname);
+                    char *entry_line = generate_manifest_line('M', ml_server->hexdigest, ml_server->version, ml_server->fname);
                     write(fout, entry_line, strlen(entry_line));
 
                     char *m_fpath;
