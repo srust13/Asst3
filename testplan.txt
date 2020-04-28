@@ -1,0 +1,2 @@
+All tests involve modifying files/directories and possibly even creating another client. The testcases are shown in testcases.txt
+The code for each command is shown in tests/scripts where the respective shell commands are shown.

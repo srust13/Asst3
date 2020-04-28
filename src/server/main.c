@@ -178,12 +178,10 @@ int main(int argc, char *argv[]){
         pthread_t thread_id;
         puts("Client connected");
 
-        // if you want to debug a single threaded app,
-        // just un-comment the below line
-        // and comment out the if-statement and its contents entirely
-
+        // single thread
         // handle_connection((void *) &client_fd);
 
+        // multithreaded
         if(pthread_create(&thread_id, NULL,
                           handle_connection, (void *) &client_fd) < 0){
             puts("Couldn't create thread");

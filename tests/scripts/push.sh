@@ -16,6 +16,7 @@ echo "somethinnew" > huffman_dir/file2
 ../../bin/WTF push huffman_dir
 rm huffman_dir/file3
 
+
 # kill server
 sleep .1
 kill -INT $pid 2>/dev/null
