@@ -4,22 +4,22 @@ follow a similar pattern. The commands are executed, manually verified, and then
 if the result will always be same as the manual verification that occured.
 
 Create:
-- We can configure localhost and create a project called huffman_dir.
-- To verify this works, we "cat" the .Manifest that should have been created upon calling the "create" command
+- Configure localhost and create a project called huffman_dir.
+- To verify this works, "cat" the .Manifest that should have been created upon calling the "create" command
   and see if it includes a project number and the name of the project
 
 Add and remove:
 - 3 files are created and have some text "echo"-ed into them.
 - Each file is then added to the .Manifest using the "add" command. File3 is added a second time to deal with the edge case
   of a user adding the same file multiple times
-- We then remove file2 to test the "remove" functionality.
-- To verify if both "add" and "remove" are working, we "cat" the .Manifest and see if both file1 and file3 are added and
+- Remove file2 to test the "remove" functionality.
+- To verify if both "add" and "remove" are working, "cat" the .Manifest and see if both file1 and file3 are added and
   file2 doesn't appear in the .Manifest. File2 will not appear in the .Manifest because the server has no idea it exists, so
   removing that file will simply take it out of the .Manifest
 
 Current version:
-- After calling the command, we verify the STDOUT is correct manually and that file1 and file3 appear.
-- The result of calling the command is compared to what we expect to return a 0 or 1, depending on if the test passes or fails
+- After calling the command, verify the STDOUT is correct manually and that file1 and file3 appear.
+- The result of calling the command is compared to the expected value and 0 or 1 is returned, depending on if the test passes or fails
 
 Checkout:
 - A project, trainReservation, is created on the server using "echo" to emulate that someone has pushed a project to
@@ -32,25 +32,25 @@ Destroy:
 - Lastly, verification is done to make sure it doesn't exist on the server
 
 Commit:
-- For all the files we added (file1 and file3), we commit them by using the "commit" command
+- For all the added files (file1 and file3), commit them by using the "commit" command
 - This will then generate a .Commit file saying that file1 and file3 were added with version 0
-- We verify the results by doing a "cat" on the .Commit and since the .Commit file is sent from client to server, we also verify
+- Verify the results by doing a "cat" on the .Commit and since the .Commit file is sent from client to server. Also verify
   the results by doing a diff on the client .Commit and the server .Commit
 
 Push:
 - A few testcases were done with push to not only verify it works in all circumstances, but the preceding commands work properly as well.
-- First, we push the current changes to the server
-- We then modify file1 and recreate file2 on the client side (and call add on file2). We then remove file3.
+- First, push the current changes to the server
+- Then, modify file1 and recreate file2 on the client side (and call add on file2). Then, remove file3.
 - The changes are commited and pushed another time
 - The results are verified by checking the Manifest on the client side and doing a recursive diff on the project
   on the server and client
 
 Update:
-- Update similarly tests all cases that could be involved. Firstly, we create another client, client2, with the same project,
-  huffman_dir (using the "checkout" command), so we can modify how the project is on the server
+- Update similarly tests all cases that could be involved. Firstly, create another client, client2, with the same project,
+  huffman_dir (using the "checkout" command), to modify the state of the project on the server
 - To the test all parts of update, we need to test when a file has been added, deleted, and modified from the server with respect
   to our client.
-- Thus, we call the appropriate command from client2 and push to the server. We "add" file3 and push to the server. We "remove" file1
+- Thus, call the appropriate command from client2 and push to the server. We "add" file3 and push to the server. We "remove" file1
   and add to the server. We modify file2 by changing it's content and pushing again. Lastly, we create a conflict by modifying file2
   such that it's different than what will be on the server.
 - Update is then called, which will generate a .Update file which will show file3 has been added and file1 has been deleted.
