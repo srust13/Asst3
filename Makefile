@@ -80,7 +80,7 @@ history: upgrade
 	@(./tests/scripts/history.sh 1>/dev/null && \
 	/bin/echo -e ${GREEN}PASS${NC} history) || /bin/echo -e ${RED}FAIL${NC} history
 
-run: currentversion destroy rollback history
+test: currentversion destroy rollback history
 
 clean:
 	$(RM) -r build/* bin/* .configure tests_out/server/* tests_out/client/* tests_out/client/.configure tests_out/client2
