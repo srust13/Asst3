@@ -38,47 +38,47 @@ all: bin/WTFserver bin/WTF
 
 create: all
 	@(./tests/scripts/create.sh 1>/dev/null && \
-	 echo ${GREEN}PASS${NC} create ) || echo ${RED}FAIL${NC} create
+	/bin/echo -e ${GREEN}PASS${NC} create ) || /bin/echo -e ${RED}FAIL${NC} create
 
 add_remove: create
 	@(./tests/scripts/add_remove.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} add_remove ) || echo ${RED}FAIL${NC} add_remove
+	/bin/echo -e ${GREEN}PASS${NC} add_remove ) || /bin/echo -e ${RED}FAIL${NC} add_remove
 
 currentversion: add_remove
 	@(./tests/scripts/currentversion.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} currentversion) || echo ${RED}FAIL${NC} currentversion
+	/bin/echo -e ${GREEN}PASS${NC} currentversion) || /bin/echo -e ${RED}FAIL${NC} currentversion
 
 checkout: add_remove
 	@(./tests/scripts/checkout.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} checkout) || echo ${RED}FAIL${NC} checkout
+	/bin/echo -e ${GREEN}PASS${NC} checkout) || /bin/echo -e ${RED}FAIL${NC} checkout
 
 destroy: checkout
 	@(./tests/scripts/destroy.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} destroy) || echo ${RED}FAIL${NC} destroy
+	/bin/echo -e ${GREEN}PASS${NC} destroy) || /bin/echo -e ${RED}FAIL${NC} destroy
 
 commit: add_remove
 	@(./tests/scripts/commit.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} commit) || echo ${RED}FAIL${NC} commit
+	/bin/echo -e ${GREEN}PASS${NC} commit) || /bin/echo -e ${RED}FAIL${NC} commit
 
 push: commit
 	@(./tests/scripts/push.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} push) || echo ${RED}FAIL${NC} push
+	/bin/echo -e ${GREEN}PASS${NC} push) || /bin/echo -e ${RED}FAIL${NC} push
 
 update: push
 	@(./tests/scripts/update.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} update) || echo ${RED}FAIL${NC} update
+	/bin/echo -e ${GREEN}PASS${NC} update) || /bin/echo -e ${RED}FAIL${NC} update
 
 upgrade: update
 	@(./tests/scripts/upgrade.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} upgrade) || echo ${RED}FAIL${NC} upgrade
+	/bin/echo -e ${GREEN}PASS${NC} upgrade) || /bin/echo -e ${RED}FAIL${NC} upgrade
 
 rollback: push
 	@(./tests/scripts/rollback.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} rollback) || echo ${RED}FAIL${NC} rollback
+	/bin/echo -e ${GREEN}PASS${NC} rollback) || /bin/echo -e ${RED}FAIL${NC} rollback
 
 history: upgrade
 	@(./tests/scripts/history.sh 1>/dev/null && \
-	echo ${GREEN}PASS${NC} history) || echo ${RED}FAIL${NC} history
+	/bin/echo -e ${GREEN}PASS${NC} history) || /bin/echo -e ${RED}FAIL${NC} history
 
 run: currentversion destroy rollback history
 
